@@ -39,16 +39,27 @@ If it fails, a dependency that cannot target the browser has reached the core.
 
 ## Development
 
-Requires a Rust toolchain. `just --list` shows everything.
+Requires a Rust toolchain ([rustup](https://rustup.rs)) and `just`:
+
+```sh
+pixi global install just     # or: brew install just, cargo install just
+just --list                  # every recipe, with descriptions
+```
 
 ```sh
 just test          # cargo test --workspace
 just lint          # fmt --check + clippy -D warnings
+just deny          # licences, advisories, and the WASM-hostile crate ban
 just wasm-check    # the guard rail
-just all           # build and run all four surfaces
+just versions      # print the version from all four bindings, to confirm they agree
+just all           # build and run everything
 ```
 
-Per-binding: `just python`, `just r`, `just wasm`.
+Per-binding: `just python`, `just r`, `just wasm-node`, `just wasm-serve`.
+
+Building a binding for the first time also needs its own toolchain — `maturin` for
+Python (`uv tool install maturin`), `wasm-pack` for the browser
+(`npm i -g wasm-pack`), and `rextendr` plus `devtools` for R.
 
 ## Relationship to other packages
 
