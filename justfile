@@ -117,6 +117,14 @@ docs-thresholds:
 docs-thresholds-check:
     python3 {{root}}/tools/generate_threshold_docs.py --check
 
+# Regenerate the ESRI:54034 reference fixture from PROJ. Needs pyproj.
+projection-fixture:
+    python3 {{root}}/tools/generate_projection_fixture.py
+
+# Fail if the projection fixture has drifted from PROJ. Needs pyproj.
+projection-fixture-check:
+    python3 {{root}}/tools/generate_projection_fixture.py --check
+
 # Build the documentation site into docs/_build.
 docs: docs-thresholds
     cd {{root}}/docs && npx -y mystmd@latest build --html

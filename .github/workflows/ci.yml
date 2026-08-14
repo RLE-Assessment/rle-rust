@@ -101,6 +101,11 @@ jobs:
         with:
           node-version: "22"
       - run: python3 tools/generate_threshold_docs.py --check
+      # The ESRI:54034 fixture is generated from PROJ and is what pins the
+      # projection to the reference implementation the rest of the geospatial world
+      # agrees with. Regenerating here catches a PROJ change, not just a local edit.
+      - run: pip install pyproj
+      - run: python3 tools/generate_projection_fixture.py --check
       - run: npm install -g mystmd
       - run: myst build --html
         working-directory: docs

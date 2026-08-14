@@ -26,6 +26,7 @@ pub mod estimate;
 pub mod ffi;
 pub mod geometry;
 pub mod grid;
+pub mod projection;
 pub mod subcondition;
 pub mod summary;
 pub mod thresholds;
