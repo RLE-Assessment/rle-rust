@@ -15,13 +15,17 @@
 //!
 //! M1. Category, threshold, and Criterion B types; no geometry and no I/O yet.
 
+pub mod aoo;
 pub mod assessment;
 pub mod category;
 pub mod category_range;
 pub mod criteria;
 pub mod criterion;
+pub mod eoo;
 pub mod estimate;
 pub mod ffi;
+pub mod geometry;
+pub mod grid;
 pub mod subcondition;
 pub mod summary;
 pub mod thresholds;
