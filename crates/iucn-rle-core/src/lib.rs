@@ -13,7 +13,27 @@
 //!
 //! # Status
 //!
-//! M0 skeleton. Only [`version`] exists so far; the domain types land in M1.
+//! M1. Category, threshold, and Criterion B types; no geometry and no I/O yet.
+
+pub mod assessment;
+pub mod category;
+pub mod category_range;
+pub mod criteria;
+pub mod criterion;
+pub mod estimate;
+pub mod subcondition;
+pub mod thresholds;
+
+pub use assessment::{Assessment, CriterionResult, Note, Provenance};
+pub use category::{Category, ParseCategoryError};
+pub use category_range::CategoryRange;
+pub use criteria::criterion_b;
+pub use criterion::{CriterionId, ParseCriterionError};
+pub use estimate::{Basis, Estimate};
+pub use subcondition::{
+    ConditionStatus, ParseSubconditionError, Subcondition, SubconditionAssessment,
+};
+pub use thresholds::{NoThresholdTable, ThresholdTable};
 
 /// The version of this crate, as reported to every language binding.
 ///

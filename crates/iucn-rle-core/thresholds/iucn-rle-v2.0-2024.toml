@@ -1,0 +1,70 @@
+# IUCN Red List of Ecosystems threshold tables.
+#
+# Source: IUCN (2024) Guidelines for the application of IUCN Red List of
+# Ecosystems Categories and Criteria, Version 2.0.
+#
+# This file is the auditable source of truth for every numeric breakpoint in the
+# library. It is deliberately data rather than code so that a reviewer who does
+# not read Rust can diff it against the published Guidelines, and so that the
+# Python, R, Julia, and JavaScript distributions can ship the identical bytes and
+# assert they agree with the compiled Rust tables.
+#
+# The Rust constants in src/thresholds.rs are checked against this file by
+# tests/thresholds_match_toml.rs, so the two cannot drift.
+#
+# Semantics, matching rle-python's `_category_for` (rle.py:103-114):
+#   * `max` is an INCLUSIVE upper bound: a value <= max meets that category.
+#   * Breakpoints are evaluated in order and the first match wins.
+#   * A value above every breakpoint yields `above_all`.
+#   * NT is never emitted: it is a judgement call with no numeric breakpoint.
+
+schema_version = 1
+guidelines_version = "2.0"
+guidelines_year = 2024
+citation = "IUCN (2024) Guidelines for the application of IUCN Red List of Ecosystems Categories and Criteria, Version 2.0"
+
+# --- Criterion B: restricted geographic distribution -------------------------
+#
+# IMPORTANT: these are the SPATIAL thresholds only. A final listing under B1 or
+# B2 additionally requires at least one of sub-conditions (a) continuing
+# decline, (b) threatening processes, or (c) few threat-defined locations. The
+# library models that gate explicitly rather than in prose; see
+# src/subcondition.rs.
+
+[[criterion]]
+id = "B1"
+metric = "eoo_km2"
+metric_description = "Extent of occurrence, the area of a minimum convex polygon enclosing all occurrences, in square kilometres"
+source = "Section 6.2, p.66"
+direction = "smaller_is_worse"
+bound = "inclusive_upper"
+above_all = "LC"
+never_emit = ["NT"]
+requires_any_subcondition = ["a", "b", "c"]
+breakpoints = [
+    { max = 2_000, category = "CR" },
+    { max = 20_000, category = "EN" },
+    { max = 50_000, category = "VU" },
+]
+
+[[criterion]]
+id = "B2"
+metric = "aoo_cells"
+metric_description = "Area of occupancy, the number of occupied 10x10 km grid cells after the 1% small-patch exclusion"
+source = "Section 6.2, p.66"
+direction = "smaller_is_worse"
+bound = "inclusive_upper"
+above_all = "LC"
+never_emit = ["NT"]
+requires_any_subcondition = ["a", "b", "c"]
+breakpoints = [
+    { max = 2, category = "CR" },
+    { max = 20, category = "EN" },
+    { max = 50, category = "VU" },
+]
+
+# B3, and Criteria A, C, and D, are deliberately absent. Their thresholds have
+# not yet been transcribed and verified against the Guidelines, and inventing
+# them would defeat the purpose of this file. Criterion E is a bespoke
+# stochastic simulation per ecosystem and will never have a table here; the
+# library accepts a caller-supplied collapse probability instead.
