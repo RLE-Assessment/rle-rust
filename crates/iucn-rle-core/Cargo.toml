@@ -1,0 +1,23 @@
+[package]
+name = "iucn-rle-core"
+description = "IUCN Red List of Ecosystems assessment calculations: pure, synchronous, no I/O"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+categories = ["science", "science::geo"]
+keywords = ["iucn", "ecosystems", "conservation", "redlist"]
+
+# INVARIANT: nothing here may touch the network, the filesystem, or the clock.
+# This crate must compile for wasm32-unknown-unknown unchanged. CI enforces it.
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,42 @@
+[advisories]
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+# Apache-2.0 for this project; permissive-only for dependencies so the Python,
+# R, and npm distributions can all ship binaries without extra obligations.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+# object_store's cloud transports do not compile for wasm32-unknown-unknown, and a
+# transitive pull would silently break the browser binding. Ban it outright; the
+# ByteSource trait in iucn-rle-io is the supported extension point instead.
+# GEOS/GDAL/PROJ sys-crates are banned for the same reason: they are C/C++ and
+# would end both the WASM binding and portable wheels.
+deny = [
+    { name = "object_store" },
+    { name = "geos" },
+    { name = "geos-sys" },
+    { name = "gdal" },
+    { name = "gdal-sys" },
+    { name = "proj" },
+    { name = "proj-sys" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

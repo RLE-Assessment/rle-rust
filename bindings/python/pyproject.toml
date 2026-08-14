@@ -1,0 +1,46 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "iucn-rle"
+description = "IUCN Red List of Ecosystems assessment calculations, powered by Rust"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [{ name = "RLE-Assessment contributors" }]
+keywords = ["iucn", "ecosystems", "conservation", "redlist", "geospatial"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+dynamic = ["version"]
+
+[project.urls]
+Repository = "https://github.com/RLE-Assessment/rle-rust"
+
+[dependency-groups]
+dev = ["pytest>=8.4.2"]
+
+[tool.maturin]
+module-name = "iucn_rle._iucn_rle"
+python-source = "python"
+manifest-path = "Cargo.toml"
+# abi3: one wheel per platform rather than one per interpreter version.
+features = ["pyo3/abi3-py311"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: fast, no I/O",
+    "integration: needs network access",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
