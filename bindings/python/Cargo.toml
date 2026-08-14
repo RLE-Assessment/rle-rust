@@ -15,6 +15,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 iucn-rle-core = { workspace = true }
+serde_json = { workspace = true }
 # abi3-py311 builds ONE wheel per platform instead of one per Python version,
 # cutting the release matrix from ~25 wheels to ~5. rle-python already requires
 # >=3.11, so this costs nothing.

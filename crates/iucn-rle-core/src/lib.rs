@@ -21,7 +21,9 @@ pub mod category_range;
 pub mod criteria;
 pub mod criterion;
 pub mod estimate;
+pub mod ffi;
 pub mod subcondition;
+pub mod summary;
 pub mod thresholds;
 
 pub use assessment::{Assessment, CriterionResult, Note, Provenance};
@@ -33,6 +35,7 @@ pub use estimate::{Basis, Estimate};
 pub use subcondition::{
     ConditionStatus, ParseSubconditionError, Subcondition, SubconditionAssessment,
 };
+pub use summary::{CriterionSummary, Summary};
 pub use thresholds::{NoThresholdTable, ThresholdTable};
 
 /// The version of this crate, as reported to every language binding.

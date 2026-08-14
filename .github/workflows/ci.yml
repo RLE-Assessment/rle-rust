@@ -69,8 +69,8 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: uv tool install maturin
       - run: maturin build -m bindings/python/Cargo.toml --out dist
-      - run: uv pip install --system dist/*.whl
-      - run: python -c "import iucn_rle; print(iucn_rle.version())"
+      - run: uv pip install --system dist/*.whl pytest
+      - run: python -m pytest bindings/python/tests -q
 
   wasm:
     runs-on: ubuntu-latest
@@ -84,8 +84,8 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - uses: jetli/wasm-pack-action@v0.4.0
-      - run: wasm-pack build bindings/wasm --target nodejs --out-dir ../../dist-wasm --out-name iucn_rle
-      - run: node -e "console.log(require('./dist-wasm/iucn_rle.js').version())"
+      - run: wasm-pack build bindings/wasm --target nodejs --out-dir ../../target/wasm-node --out-name iucn_rle
+      - run: node --test js/conformance.mjs
 
   r:
     runs-on: ubuntu-latest

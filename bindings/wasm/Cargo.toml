@@ -14,6 +14,10 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 iucn-rle-core = { workspace = true }
+serde = { workspace = true }
+# Converts the summary into a real JS object rather than a JSON string, so the
+# browser API is idiomatic. Small and wasm-native.
+serde-wasm-bindgen = "0.6"
 wasm-bindgen = "0.2"
 
 [dev-dependencies]

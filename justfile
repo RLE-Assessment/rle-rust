@@ -77,11 +77,41 @@ r:
 r-check:
     Rscript -e 'setwd("{{root}}/bindings/r/iucnrle"); devtools::check()'
 
+# --- Conformance ------------------------------------------------------------
+#
+# One corpus (fixtures/cases/*.json), five runners. This is what makes "all the
+# bindings agree" a checkable claim rather than an aspiration.
+
+# Run the conformance corpus through Rust and the C ABI.
+conformance-rust:
+    cargo test -p iucn-rle-core --test conformance
+    cargo test -p iucn-rle-capi
+
+# Run the conformance corpus through the Python binding.
+conformance-python: python
+    uv pip install --python {{root}}/target/venv/bin/python -q --force-reinstall \
+        {{root}}/target/wheels/*.whl
+    {{root}}/target/venv/bin/python -m pytest {{root}}/bindings/python/tests -q
+
+# Run the conformance corpus through the WASM binding under Node.
+conformance-js: wasm-node
+    node --test {{root}}/js/conformance.mjs
+
+# Run the conformance corpus through the R binding.
+conformance-r:
+    Rscript -e 'setwd("{{root}}/bindings/r/iucnrle"); pkgload::load_all(quiet=TRUE); \
+        testthat::test_dir("tests/testthat", package="iucnrle", load_package="none", \
+        stop_on_failure=TRUE)'
+
+# Run the conformance corpus through every surface. If this passes, they agree.
+conformance: conformance-rust conformance-python conformance-js conformance-r
+    @echo "All surfaces agree on the conformance corpus."
+
 # --- Everything -------------------------------------------------------------
 
-# Build and run all four surfaces. This is what M0 exists to keep green.
-all: lint test deny wasm-check python wasm-node r
-    @echo "All four surfaces built."
+# Lint, test, and prove every surface agrees. The full gate.
+all: lint test deny wasm-check conformance
+    @echo "All surfaces built and in agreement."
 
 # Print the version from every binding, to confirm they agree.
 versions:

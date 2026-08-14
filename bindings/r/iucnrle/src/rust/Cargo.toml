@@ -20,6 +20,7 @@ extendr-api = '0.9'
 # must become a crates.io version dependency (or be vendored via `cargo vendor`).
 # That is the reason M0 publishes iucn-rle-core to crates.io first.
 iucn-rle-core = { path = '../../../../../crates/iucn-rle-core' }
+serde_json = '1'
 
 [profile.release]
 lto = true

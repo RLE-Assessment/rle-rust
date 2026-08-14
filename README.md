@@ -3,8 +3,25 @@
 IUCN Red List of Ecosystems assessment calculations, implemented in Rust and callable from
 Python, R, the browser, and the command line.
 
-> **Status: M0 — skeleton.** All four surfaces build and run, but the only function is
-> `version()`. The Criterion B category engine lands in M1.
+> **Status: M1.** Criterion B works end to end on every surface. No geometry and no
+> network yet — you supply EOO and AOO, the engine applies the IUCN thresholds and the
+> sub-condition gate. Spatial computation lands in M2, remote data in M3.
+
+```sh
+$ iucn-rle criterion-b --eoo-km2 15000 --aoo-cells 15
+Criterion B: EN (LC-EN)
+
+  B1   EN (LC-EN)     (thresholds alone: EN)
+  B2   EN (LC-EN)     (thresholds alone: EN)
+
+  note: sub-conditions (a), (b), (c) not assessed, so the listing is provisional
+```
+
+That range is the point. Criterion B needs a spatial threshold **and** at least one of
+sub-conditions (a) continuing decline, (b) threatening processes, or (c) few locations.
+`rle-python` notes this in a docstring; `redlistr` assigns no categories at all. Here it
+is typed, so "we have not checked" produces an honest range instead of a bare `EN` that
+overstates confidence. Say `--sub a=met` and you get `EN`.
 
 ## Why
 
@@ -22,6 +39,7 @@ Python, R, the browser, and the command line.
 
 ```
 crates/iucn-rle-core     pure, synchronous, no I/O — the domain. Compiles to wasm32 unchanged.
+crates/iucn-rle-capi     extern "C" ABI  ->  Julia (ccall) and any future language
 crates/iucn-rle-cli      the `iucn-rle` binary
 bindings/python          pyo3 + maturin  ->  PyPI `iucn-rle`      (import iucn_rle)
 bindings/r/iucnrle       extendr         ->  r-universe `iucnrle`
@@ -51,11 +69,24 @@ just test          # cargo test --workspace
 just lint          # fmt --check + clippy -D warnings
 just deny          # licences, advisories, and the WASM-hostile crate ban
 just wasm-check    # the guard rail
-just versions      # print the version from all four bindings, to confirm they agree
-just all           # build and run everything
+just conformance   # run the shared corpus through every surface
+just all           # the full gate
 ```
 
 Per-binding: `just python`, `just r`, `just wasm-node`, `just wasm-serve`.
+
+## Conformance
+
+`fixtures/cases/*.json` holds the cross-language corpus, and Rust, the C ABI, Python, R,
+and JavaScript each run the identical file. Categories are compared as display strings,
+so `"EN (LC-EN)"` is one exact comparison in every language with no float tolerance to
+negotiate. A binding is not finished until it passes.
+
+That is what makes "all the bindings agree" checkable rather than aspirational:
+
+```sh
+just conformance
+```
 
 Building a binding for the first time also needs its own toolchain — `maturin` for
 Python (`uv tool install maturin`), `wasm-pack` for the browser

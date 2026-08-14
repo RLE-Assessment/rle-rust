@@ -9,4 +9,19 @@ NULL
 #' @export
 rle_version <- function() .Call(wrap__rle_version)
 
+#' The IUCN threshold table as TOML.
+#' @export
+rle_thresholds_toml <- function() .Call(wrap__rle_thresholds_toml)
+
+#' SHA-256 of the IUCN threshold table.
+#' @export
+rle_thresholds_sha256 <- function() .Call(wrap__rle_thresholds_sha256)
+
+#' Assess IUCN RLE Criterion B, returning a JSON summary.
+#'
+#' Sub-conditions arrive as two parallel character vectors so the interface
+#' stays a plain R vector pair rather than a list of lists.
+#' @export
+rle_criterion_b_json <- function(eoo_km2, aoo_cells, sub_names, sub_statuses, eoo_lower_km2, eoo_upper_km2, aoo_lower_cells, aoo_upper_cells) .Call(wrap__rle_criterion_b_json, eoo_km2, aoo_cells, sub_names, sub_statuses, eoo_lower_km2, eoo_upper_km2, aoo_lower_cells, aoo_upper_cells)
+
 # nolint end
