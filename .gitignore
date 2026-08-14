@@ -21,6 +21,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
+# --- Documentation (mystmd) ---
+docs/_build/
+
 # --- WASM binding (wasm-pack) ---
 dist-wasm/
 node_modules/

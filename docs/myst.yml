@@ -1,0 +1,31 @@
+version: 1
+project:
+  id: iucn-rle-rust
+  title: IUCN Red List of Ecosystems
+  subtitle: Assessment calculations for Python, R, Julia, the browser and the command line
+  description: >-
+    One validated implementation of the IUCN Red List of Ecosystems criteria,
+    callable from every language an assessment team is likely to use.
+  keywords:
+    - IUCN
+    - Red List of Ecosystems
+    - conservation
+    - ecosystem risk assessment
+    - geospatial
+  github: https://github.com/RLE-Assessment/rle-rust
+  license: Apache-2.0
+  toc:
+    - file: index.md
+    - title: Understanding the criteria
+      children:
+        - file: concepts.md
+        - file: thresholds.md
+    - title: Using the library
+      children:
+        - file: install.md
+        - file: quickstart.md
+site:
+  template: book-theme
+  options:
+    favicon: null
+    logo_text: IUCN RLE

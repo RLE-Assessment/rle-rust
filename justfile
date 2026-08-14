@@ -107,10 +107,28 @@ conformance-r:
 conformance: conformance-rust conformance-python conformance-js conformance-r
     @echo "All surfaces agree on the conformance corpus."
 
+# --- Documentation ----------------------------------------------------------
+
+# Regenerate docs/thresholds.md from the threshold table the library ships.
+docs-thresholds:
+    python3 {{root}}/tools/generate_threshold_docs.py
+
+# Fail if docs/thresholds.md has drifted from the threshold table.
+docs-thresholds-check:
+    python3 {{root}}/tools/generate_threshold_docs.py --check
+
+# Build the documentation site into docs/_build.
+docs: docs-thresholds
+    cd {{root}}/docs && npx -y mystmd@latest build --html
+
+# Serve the documentation with live reload.
+docs-serve: docs-thresholds
+    cd {{root}}/docs && npx -y mystmd@latest start
+
 # --- Everything -------------------------------------------------------------
 
 # Lint, test, and prove every surface agrees. The full gate.
-all: lint test deny wasm-check conformance
+all: lint test deny wasm-check docs-thresholds-check conformance
     @echo "All surfaces built and in agreement."
 
 # Print the version from every binding, to confirm they agree.
