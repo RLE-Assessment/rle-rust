@@ -4,17 +4,32 @@
 # all five pass, the bindings provably agree.
 
 corpus_path <- function() {
-  # Works both from the package source tree and from an installed package.
+  # IUCN_RLE_REPO_ROOT is set by CI so the corpus is found deterministically rather
+  # than by counting directories up from wherever testthat happens to run.
+  root <- Sys.getenv("IUCN_RLE_REPO_ROOT", unset = NA)
+  # test_path() throws outside a testthat context, which would pre-empt the error
+  # below with a far less useful message. Guard it rather than let it escape.
+  from_test_path <- tryCatch(
+    testthat::test_path("..", "..", "..", "..", "..", "fixtures", "cases", "criterion_b.json"),
+    error = function(e) NULL
+  )
   candidates <- c(
+    if (!is.na(root)) file.path(root, "fixtures", "cases", "criterion_b.json"),
     file.path("..", "..", "..", "..", "..", "fixtures", "cases", "criterion_b.json"),
-    testthat::test_path("..", "..", "..", "..", "..", "fixtures", "cases", "criterion_b.json")
+    from_test_path
   )
   for (path in candidates) {
     if (file.exists(path)) {
       return(normalizePath(path))
     }
   }
-  skip("conformance corpus not found; run from the repository checkout")
+  # Deliberately an error, not a skip. A skip here would silently pass the entire
+  # conformance suite, which is the one failure mode this corpus exists to prevent.
+  stop(
+    "conformance corpus not found. Set IUCN_RLE_REPO_ROOT, or run from the ",
+    "repository checkout. Tried:\n  ", paste(candidates, collapse = "\n  "),
+    call. = FALSE
+  )
 }
 
 cases <- jsonlite::fromJSON(corpus_path(), simplifyDataFrame = FALSE)$cases
