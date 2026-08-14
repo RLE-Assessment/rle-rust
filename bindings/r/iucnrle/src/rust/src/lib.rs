@@ -9,7 +9,9 @@
 //! and it keeps one flattening shared with the Python, WASM, and C bindings.
 
 use extendr_api::prelude::*;
-use iucn_rle_core::ffi::{criterion_b_from_parts, MetricInput, SubconditionInput};
+use iucn_rle_core::ffi::{
+    criterion_b_from_parts, MetricInput, SubconditionInput, SubconditionsInput,
+};
 
 /// Version of the underlying iucn-rle-core calculation engine.
 /// @export
@@ -48,37 +50,58 @@ fn metric(best: Nullable<f64>, lower: Nullable<f64>, upper: Nullable<f64>) -> Op
 
 /// Assess IUCN RLE Criterion B, returning a JSON summary.
 ///
-/// Sub-conditions arrive as two parallel character vectors so the interface
-/// stays a plain R vector pair rather than a list of lists.
+/// Clauses arrive as two parallel character vectors so the interface stays a plain
+/// R vector pair rather than a list of lists. Clause (c) is separate because it is a
+/// count of threat-defined locations, not a status.
 /// @export
 #[extendr]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 fn rle_criterion_b_json(
     eoo_km2: Nullable<f64>,
     aoo_cells: Nullable<f64>,
-    sub_names: Vec<String>,
-    sub_statuses: Vec<String>,
+    clause_names: Vec<String>,
+    clause_statuses: Vec<String>,
+    locations: Nullable<f64>,
+    no_plausible_threats: bool,
+    locations_insufficient_information: bool,
     eoo_lower_km2: Nullable<f64>,
     eoo_upper_km2: Nullable<f64>,
     aoo_lower_cells: Nullable<f64>,
     aoo_upper_cells: Nullable<f64>,
 ) -> Result<String, Error> {
-    if sub_names.len() != sub_statuses.len() {
+    if clause_names.len() != clause_statuses.len() {
         return Err(Error::Other(
-            "sub-condition names and statuses must have the same length".into(),
+            "clause names and statuses must have the same length".into(),
         ));
     }
 
-    let subs: Vec<SubconditionInput> = sub_names
-        .into_iter()
-        .zip(sub_statuses)
-        .map(|(sub, status)| SubconditionInput { sub, status })
-        .collect();
+    // R has no integer-only numeric literal, so a count arrives as a double.
+    let locations = match optional(locations) {
+        Some(n) if n >= 0.0 => Some(n as u32),
+        Some(n) => {
+            return Err(Error::Other(format!(
+                "threat-defined locations must not be negative, got {n}"
+            )))
+        }
+        None => None,
+    };
+
+    let subs = SubconditionsInput {
+        clauses: clause_names
+            .into_iter()
+            .zip(clause_statuses)
+            .map(|(sub, status)| SubconditionInput { sub, status })
+            .collect(),
+        locations,
+        no_plausible_threats,
+        locations_insufficient_information,
+    };
 
     // Everything below is plain data; no SEXP is touched until this returns.
     let summary = criterion_b_from_parts(
         metric(eoo_km2, eoo_lower_km2, eoo_upper_km2),
         metric(aoo_cells, aoo_lower_cells, aoo_upper_cells),
-        &subs,
+        subs,
     )
     .map_err(Error::Other)?;
 

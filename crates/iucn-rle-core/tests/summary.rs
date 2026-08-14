@@ -6,13 +6,13 @@
 //! their display form so a caller compares `"EN (LC-EN)"` rather than
 //! reconstructing it from three enum fields.
 
-use iucn_rle_core::{criterion_b, Basis, Estimate, ThresholdTable};
+use iucn_rle_core::{criterion_b, Basis, Estimate, Subconditions, ThresholdTable};
 
 fn assessment() -> iucn_rle_core::Assessment {
     criterion_b(
         Some(Estimate::point(15_000.0, Basis::Estimated)),
         Some(Estimate::point(15.0, Basis::Estimated)),
-        &[],
+        &Subconditions::new(),
         ThresholdTable::v2_2024(),
     )
     .unwrap()
@@ -39,7 +39,10 @@ fn summary_lists_each_sub_criterion() {
     assert_eq!(b1.category, "EN (LC-EN)");
     assert_eq!(b1.threshold_category.as_deref(), Some("EN"));
 
-    assert_eq!(summary.criteria.len(), 2);
+    // B1, B2 and B3. B3 is always reported, even when unevaluated, so a reader can see
+    // it was considered rather than silently omitted.
+    assert_eq!(summary.criteria.len(), 3);
+    assert!(summary.criteria.iter().any(|c| c.criterion == "B3"));
 }
 
 #[test]

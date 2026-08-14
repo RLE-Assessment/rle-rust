@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Category, CategoryRange, CriterionId, Estimate, Subcondition, SubconditionAssessment};
+use crate::{Category, CategoryRange, CriterionId, Estimate, Subconditions};
 
 /// A machine-readable caveat attached to a result.
 ///
@@ -17,11 +17,27 @@ pub enum Note {
     MetricMissing,
     /// These sub-conditions were never assessed, so the outcome is a range.
     SubconditionsNotAssessed {
-        /// The sub-conditions still awaiting assessment.
-        pending: Vec<Subcondition>,
+        /// Clause letters still awaiting assessment: `"a"`, `"b"`, `"c"`.
+        pending: Vec<String>,
     },
     /// Every sub-condition was assessed and none is met.
     SubconditionsRefuted,
+    /// Threats exist but their extent could not be assessed, so the sub-criterion is
+    /// Data Deficient rather than a finding (Box 13, step 5).
+    LocationsInsufficientInformation,
+    /// B3's limbs were not both settled, so its outcome is a range.
+    B3NotAssessed,
+    /// The Box 13 step 6(iv) Near Threatened pathway may apply.
+    ///
+    /// That rule depends on judgements the engine cannot make — whether information is
+    /// "insufficient", and whether less than 30% of the distribution is unthreatened —
+    /// so it is surfaced for the assessor rather than computed.
+    NearThreatenedMayApply {
+        /// The number of threat-defined locations recorded.
+        locations: u32,
+        /// The count at or below which the pathway can be invoked.
+        max_locations: u32,
+    },
 }
 
 /// The outcome for one sub-criterion.
@@ -30,7 +46,7 @@ pub struct CriterionResult {
     criterion: CriterionId,
     metric: Option<Estimate>,
     threshold_category: Option<CategoryRange>,
-    subconditions: Vec<SubconditionAssessment>,
+    subconditions: Subconditions,
     category: CategoryRange,
     notes: Vec<Note>,
 }
@@ -40,7 +56,7 @@ impl CriterionResult {
         criterion: CriterionId,
         metric: Option<Estimate>,
         threshold_category: Option<CategoryRange>,
-        subconditions: Vec<SubconditionAssessment>,
+        subconditions: Subconditions,
         category: CategoryRange,
         notes: Vec<Note>,
     ) -> Self {
@@ -75,9 +91,9 @@ impl CriterionResult {
         self.threshold_category
     }
 
-    /// The sub-condition assessments that were supplied.
+    /// The sub-condition evidence that was supplied.
     #[must_use]
-    pub fn subconditions(&self) -> &[SubconditionAssessment] {
+    pub const fn subconditions(&self) -> &Subconditions {
         &self.subconditions
     }
 
@@ -200,10 +216,26 @@ impl Assessment {
 /// result down: one unevaluable metric must not mask a real finding from
 /// another. If nothing at all could be evaluated, the result is `NE`.
 pub(crate) fn overall(results: &[CriterionResult]) -> CategoryRange {
-    let evaluated = results
+    let evaluated: Vec<CategoryRange> = results
         .iter()
         .map(CriterionResult::category)
-        .filter(|c| c.best() != Category::Ne);
+        .filter(|c| c.best() != Category::Ne)
+        .collect();
 
-    CategoryRange::most_threatened(evaluated).unwrap_or_else(|| CategoryRange::point(Category::Ne))
+    // Data Deficient is the absence of an answer, not a low-risk answer. If any
+    // sub-criterion produced a real category, that governs; DD only stands when
+    // nothing else did.
+    let decided: Vec<CategoryRange> = evaluated
+        .iter()
+        .copied()
+        .filter(|c| c.best() != Category::Dd)
+        .collect();
+
+    let pool = if decided.is_empty() {
+        evaluated
+    } else {
+        decided
+    };
+
+    CategoryRange::most_threatened(pool).unwrap_or_else(|| CategoryRange::point(Category::Ne))
 }

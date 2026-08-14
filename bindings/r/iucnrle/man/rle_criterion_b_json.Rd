@@ -7,8 +7,11 @@
 rle_criterion_b_json(
   eoo_km2,
   aoo_cells,
-  sub_names,
-  sub_statuses,
+  clause_names,
+  clause_statuses,
+  locations,
+  no_plausible_threats,
+  locations_insufficient_information,
   eoo_lower_km2,
   eoo_upper_km2,
   aoo_lower_cells,
@@ -16,6 +19,7 @@ rle_criterion_b_json(
 )
 }
 \description{
-Sub-conditions arrive as two parallel character vectors so the interface
-stays a plain R vector pair rather than a list of lists.
+Clauses arrive as two parallel character vectors so the interface stays a plain
+R vector pair rather than a list of lists. Clause (c) is separate because it is a
+count of threat-defined locations, not a status.
 }

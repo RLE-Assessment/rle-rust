@@ -30,7 +30,9 @@
 
 use std::ffi::{c_char, CStr, CString};
 
-use iucn_rle_core::ffi::{criterion_b_from_parts, MetricInput, SubconditionInput};
+use iucn_rle_core::ffi::{
+    criterion_b_from_parts, MetricInput, SubconditionInput, SubconditionsInput,
+};
 use serde::Deserialize;
 
 /// Arguments to [`iucn_rle_criterion_b`], as JSON.
@@ -43,7 +45,12 @@ struct Args {
     aoo_cells: Option<f64>,
     aoo_lower_cells: Option<f64>,
     aoo_upper_cells: Option<f64>,
-    subconditions: Vec<SubconditionInput>,
+    /// Clause (a) aspects, clause (b), and B3's rapid-collapse limb.
+    clauses: Vec<SubconditionInput>,
+    /// Clause (c): a COUNT of threat-defined locations, not a status.
+    locations: Option<u32>,
+    no_plausible_threats: bool,
+    locations_insufficient_information: bool,
 }
 
 fn metric(best: Option<f64>, lower: Option<f64>, upper: Option<f64>) -> Option<MetricInput> {
@@ -98,10 +105,17 @@ pub unsafe extern "C" fn iucn_rle_criterion_b(args_json: *const c_char) -> *mut 
         Err(e) => return into_c_string(error_json(&format!("invalid JSON arguments: {e}"))),
     };
 
+    let subs = SubconditionsInput {
+        clauses: args.clauses,
+        locations: args.locations,
+        no_plausible_threats: args.no_plausible_threats,
+        locations_insufficient_information: args.locations_insufficient_information,
+    };
+
     let summary = match criterion_b_from_parts(
         metric(args.eoo_km2, args.eoo_lower_km2, args.eoo_upper_km2),
         metric(args.aoo_cells, args.aoo_lower_cells, args.aoo_upper_cells),
-        &args.subconditions,
+        subs,
     ) {
         Ok(summary) => summary,
         Err(e) => return into_c_string(error_json(&e)),

@@ -33,8 +33,11 @@ Status = Literal["met", "not_met", "not_assessed"]
 def criterion_b(
     eoo_km2: float | None = None,
     aoo_cells: float | None = None,
-    subconditions: dict[str, Status] | Sequence[tuple[str, Status]] | None = None,
+    clauses: dict[str, Status] | Sequence[tuple[str, Status]] | None = None,
     *,
+    locations: int | None = None,
+    no_plausible_threats: bool = False,
+    locations_insufficient_information: bool = False,
     eoo_bounds: tuple[float, float] | None = None,
     aoo_bounds: tuple[float, float] | None = None,
 ) -> dict[str, Any]:
@@ -43,10 +46,18 @@ def criterion_b(
     Args:
         eoo_km2: Extent of occurrence in km2 (sub-criterion B1).
         aoo_cells: Occupied 10x10 km cells after the 1% exclusion (B2).
-        subconditions: Status of sub-conditions ``"a"``, ``"b"``, and ``"c"``,
-            each ``"met"``, ``"not_met"``, or ``"not_assessed"``. Anything
-            omitted counts as *not assessed*, which is deliberately different
-            from *not met*.
+        clauses: Status of clause ``"a"`` (or its aspects ``"a.i"``, ``"a.ii"``,
+            ``"a.iii"``), clause ``"b"``, and ``"b3_rapid_collapse"`` for B3's
+            second limb. Each is ``"met"``, ``"not_met"`` or ``"not_assessed"``.
+            Anything omitted counts as *not assessed*, which is deliberately
+            different from *not met*.
+        locations: Clause (c) — the number of threat-defined locations. This is a
+            **count, not a status**, because clause (c) is category dependent:
+            1 location for CR, <=5 for EN, <=10 for VU.
+        no_plausible_threats: No plausible threats exist, so clause (c) and B3 are
+            *not met*. A finding, distinct from omitting ``locations``.
+        locations_insufficient_information: Threats exist but their extent cannot
+            be assessed, yielding Data Deficient.
         eoo_bounds: Plausible ``(lower, upper)`` bounds on the EOO.
         aoo_bounds: Plausible ``(lower, upper)`` bounds on the AOO.
 
@@ -55,25 +66,39 @@ def criterion_b(
         the provenance needed to reproduce the result.
 
     The spatial thresholds alone do not produce a listing: Criterion B also
-    requires at least one sub-condition. So an ecosystem whose metrics say EN,
-    but whose sub-conditions nobody has examined, is reported as ``"EN (LC-EN)"``
-    rather than a bare ``"EN"`` that would overstate confidence::
+    requires at least one of clauses (a), (b) or (c). So an ecosystem whose
+    metrics say EN, but whose clauses nobody has examined, is reported as
+    ``"EN (LC-EN)"`` rather than a bare ``"EN"`` that would overstate confidence::
 
         >>> iucn_rle.criterion_b(eoo_km2=15_000)["overall"]
         'EN (LC-EN)'
-        >>> iucn_rle.criterion_b(eoo_km2=15_000, subconditions={"a": "met"})["overall"]
+        >>> iucn_rle.criterion_b(eoo_km2=15_000, clauses={"a": "met"})["overall"]
+        'EN'
+
+    Clause (c) being category dependent has teeth. An EOO of 1,500 km2 is in the
+    CR band, but CR requires exactly one threat-defined location, so three
+    locations qualifies only at EN::
+
+        >>> iucn_rle.criterion_b(
+        ...     eoo_km2=1_500,
+        ...     clauses={"a": "not_met", "b": "not_met"},
+        ...     locations=3,
+        ... )["criteria"][0]["category"]
         'EN'
     """
-    if isinstance(subconditions, dict):
-        pairs = list(subconditions.items())
+    if isinstance(clauses, dict):
+        pairs = list(clauses.items())
     else:
-        pairs = list(subconditions or [])
+        pairs = list(clauses or [])
 
     return json.loads(
         criterion_b_json(
             eoo_km2=eoo_km2,
             aoo_cells=aoo_cells,
-            subconditions=pairs,
+            clauses=pairs,
+            locations=locations,
+            no_plausible_threats=no_plausible_threats,
+            locations_insufficient_information=locations_insufficient_information,
             eoo_lower_km2=eoo_bounds[0] if eoo_bounds else None,
             eoo_upper_km2=eoo_bounds[1] if eoo_bounds else None,
             aoo_lower_cells=aoo_bounds[0] if aoo_bounds else None,

@@ -9,7 +9,9 @@
 //! around `@developmentseed/geotiff` throwing "Unsupported coordinate
 //! transformation type: 28".
 
-use iucn_rle_core::ffi::{criterion_b_from_parts, MetricInput, SubconditionInput};
+use iucn_rle_core::ffi::{
+    criterion_b_from_parts, MetricInput, SubconditionInput, SubconditionsInput,
+};
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
@@ -44,7 +46,12 @@ struct Args {
     aoo_cells: Option<f64>,
     aoo_lower_cells: Option<f64>,
     aoo_upper_cells: Option<f64>,
-    subconditions: Vec<SubconditionInput>,
+    /// Clause (a) aspects, clause (b), and B3's rapid-collapse limb.
+    clauses: Vec<SubconditionInput>,
+    /// Clause (c): a COUNT of threat-defined locations, not a status.
+    locations: Option<u32>,
+    no_plausible_threats: bool,
+    locations_insufficient_information: bool,
 }
 
 fn metric(best: Option<f64>, lower: Option<f64>, upper: Option<f64>) -> Option<MetricInput> {
@@ -57,13 +64,19 @@ fn metric(best: Option<f64>, lower: Option<f64>, upper: Option<f64>) -> Option<M
 /// Assess IUCN RLE Criterion B.
 ///
 /// ```js
-/// criterionB({ eooKm2: 15000 }).overall;                                  // "EN (LC-EN)"
-/// criterionB({ eooKm2: 15000, subconditions: [{ sub: "a", status: "met" }] }).overall; // "EN"
+/// criterionB({ eooKm2: 15000 }).overall;                                   // "EN (LC-EN)"
+/// criterionB({ eooKm2: 15000, clauses: [{ sub: "a", status: "met" }] }).overall; // "EN"
+///
+/// // Clause (c) is a COUNT, and category dependent: CR needs exactly one
+/// // threat-defined location, so three qualifies only at EN.
+/// criterionB({ eooKm2: 1500, locations: 3,
+///              clauses: [{ sub: "a", status: "not_met" },
+///                        { sub: "b", status: "not_met" }] });
 /// ```
 ///
 /// # Errors
 ///
-/// Throws if the argument object or a sub-condition value is malformed.
+/// Throws if the argument object or a clause value is malformed.
 #[wasm_bindgen(js_name = criterionB)]
 pub fn criterion_b(args: JsValue) -> Result<JsValue, JsError> {
     let args: Args = if args.is_undefined() || args.is_null() {
@@ -72,10 +85,17 @@ pub fn criterion_b(args: JsValue) -> Result<JsValue, JsError> {
         serde_wasm_bindgen::from_value(args).map_err(|e| JsError::new(&e.to_string()))?
     };
 
+    let subs = SubconditionsInput {
+        clauses: args.clauses,
+        locations: args.locations,
+        no_plausible_threats: args.no_plausible_threats,
+        locations_insufficient_information: args.locations_insufficient_information,
+    };
+
     let summary = criterion_b_from_parts(
         metric(args.eoo_km2, args.eoo_lower_km2, args.eoo_upper_km2),
         metric(args.aoo_cells, args.aoo_lower_cells, args.aoo_upper_cells),
-        &args.subconditions,
+        subs,
     )
     .map_err(|e| JsError::new(&e))?;
 

@@ -1,41 +1,49 @@
-//! Parsing sub-conditions and statuses from strings.
+//! Parsing sub-condition aspects and statuses from strings.
 //!
-//! Every language binding receives these as strings across the FFI boundary, so
-//! the parsing lives here once rather than being reimplemented five times.
+//! Every language binding receives these as strings across the FFI boundary, so the
+//! parsing lives here once rather than being reimplemented five times.
 
-use iucn_rle_core::{ConditionStatus, Subcondition};
+use iucn_rle_core::{ConditionStatus, DeclineAspect};
 
 #[test]
-fn subconditions_parse_from_guidelines_letters() {
+fn decline_aspects_parse_from_roman_numerals() {
+    // Clause (a) has three sub-parts in the criteria, addressed as i, ii and iii.
     assert_eq!(
-        "a".parse::<Subcondition>().unwrap(),
-        Subcondition::ContinuingDecline
+        "i".parse::<DeclineAspect>().unwrap(),
+        DeclineAspect::SpatialExtent
     );
     assert_eq!(
-        "b".parse::<Subcondition>().unwrap(),
-        Subcondition::ThreateningProcesses
+        "ii".parse::<DeclineAspect>().unwrap(),
+        DeclineAspect::EnvironmentalQuality
     );
     assert_eq!(
-        "c".parse::<Subcondition>().unwrap(),
-        Subcondition::FewLocations
+        "iii".parse::<DeclineAspect>().unwrap(),
+        DeclineAspect::BioticInteractions
     );
 }
 
 #[test]
-fn subconditions_parse_from_snake_case_names() {
+fn decline_aspects_parse_from_snake_case_names() {
     assert_eq!(
-        "continuing_decline".parse::<Subcondition>().unwrap(),
-        Subcondition::ContinuingDecline
+        "spatial_extent".parse::<DeclineAspect>().unwrap(),
+        DeclineAspect::SpatialExtent
     );
     assert_eq!(
-        "few_locations".parse::<Subcondition>().unwrap(),
-        Subcondition::FewLocations
+        "biotic_interactions".parse::<DeclineAspect>().unwrap(),
+        DeclineAspect::BioticInteractions
     );
 }
 
 #[test]
-fn an_unknown_subcondition_fails() {
-    assert!("d".parse::<Subcondition>().is_err());
+fn decline_aspects_expose_their_numerals() {
+    assert_eq!(DeclineAspect::SpatialExtent.numeral(), "i");
+    assert_eq!(DeclineAspect::EnvironmentalQuality.numeral(), "ii");
+    assert_eq!(DeclineAspect::BioticInteractions.numeral(), "iii");
+}
+
+#[test]
+fn an_unknown_aspect_fails() {
+    assert!("iv".parse::<DeclineAspect>().is_err());
 }
 
 #[test]
@@ -56,8 +64,8 @@ fn statuses_parse_from_snake_case() {
 
 #[test]
 fn an_unknown_status_fails() {
-    // "unknown" is a plausible synonym a caller might reach for, but accepting
-    // it silently would blur the not-met / not-assessed distinction the whole
-    // gate depends on. Reject it and make the caller choose.
+    // "unknown" is a plausible synonym a caller might reach for, but accepting it
+    // silently would blur the not-met / not-assessed distinction the whole gate
+    // depends on. Reject it and make the caller choose.
     assert!("unknown".parse::<ConditionStatus>().is_err());
 }

@@ -18,22 +18,19 @@ struct Corpus {
     cases: Vec<Case>,
 }
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
+#[serde(default)]
 struct Case {
     id: String,
     eoo_km2: Option<f64>,
     eoo_lower_km2: Option<f64>,
     eoo_upper_km2: Option<f64>,
     aoo_cells: Option<f64>,
-    subconditions: serde_json::Value,
-    expect: Expect,
-}
-
-#[derive(Deserialize)]
-struct Expect {
-    b1: String,
-    b2: String,
-    overall: String,
+    clauses: serde_json::Value,
+    locations: Option<u32>,
+    no_plausible_threats: bool,
+    locations_insufficient_information: bool,
+    expect: std::collections::HashMap<String, String>,
 }
 
 /// Call the C ABI exactly as a foreign caller would, and free the result.
@@ -63,7 +60,7 @@ fn corpus() -> Corpus {
 #[test]
 fn every_case_matches_across_the_c_abi() {
     let corpus = corpus();
-    assert!(corpus.cases.len() >= 20, "corpus shrank unexpectedly");
+    assert!(corpus.cases.len() >= 28, "corpus shrank unexpectedly");
 
     let mut failures = Vec::new();
 
@@ -79,13 +76,26 @@ fn every_case_matches_across_the_c_abi() {
                 args.insert(key.to_owned(), serde_json::json!(v));
             }
         }
-        args.insert("subconditions".to_owned(), case.subconditions.clone());
+        if !case.clauses.is_null() {
+            args.insert("clauses".to_owned(), case.clauses.clone());
+        }
+        if let Some(n) = case.locations {
+            args.insert("locations".to_owned(), serde_json::json!(n));
+        }
+        args.insert(
+            "no_plausible_threats".to_owned(),
+            serde_json::json!(case.no_plausible_threats),
+        );
+        args.insert(
+            "locations_insufficient_information".to_owned(),
+            serde_json::json!(case.locations_insufficient_information),
+        );
 
         let result = call(&serde_json::Value::Object(args));
 
         let by_criterion: std::collections::HashMap<&str, &str> = result["criteria"]
             .as_array()
-            .expect("criteria array")
+            .unwrap_or_else(|| panic!("{}: no criteria array in {result}", case.id))
             .iter()
             .map(|c| {
                 (
@@ -95,22 +105,21 @@ fn every_case_matches_across_the_c_abi() {
             })
             .collect();
 
-        let actual = (
-            by_criterion["B1"],
-            by_criterion["B2"],
-            result["overall"].as_str().unwrap(),
-        );
-        let expected = (
-            case.expect.b1.as_str(),
-            case.expect.b2.as_str(),
-            case.expect.overall.as_str(),
-        );
-
-        if actual != expected {
-            failures.push(format!(
-                "{}: expected {expected:?}, got {actual:?}",
-                case.id
-            ));
+        for (key, expected) in &case.expect {
+            let actual = if key == "overall" {
+                result["overall"].as_str().unwrap()
+            } else {
+                by_criterion
+                    .get(key.to_uppercase().as_str())
+                    .copied()
+                    .unwrap_or("<missing>")
+            };
+            if actual != expected {
+                failures.push(format!(
+                    "{}: {key} expected {expected:?}, got {actual:?}",
+                    case.id
+                ));
+            }
         }
     }
 
@@ -123,7 +132,7 @@ fn a_rejected_subcondition_comes_back_as_a_json_error_not_a_crash() {
     // return a well-formed JSON object rather than unwinding across the ABI.
     let result = call(&serde_json::json!({
         "eoo_km2": 15000.0,
-        "subconditions": [{ "sub": "z", "status": "met" }]
+        "clauses": [{ "sub": "z", "status": "met" }]
     }));
 
     let error = result["error"].as_str().expect("an error key");
@@ -132,8 +141,24 @@ fn a_rejected_subcondition_comes_back_as_a_json_error_not_a_crash() {
         "error should name the bad value: {error}"
     );
     assert!(
-        error.contains("a|b|c"),
+        error.contains("a|b"),
         "error should list valid values: {error}"
+    );
+}
+
+#[test]
+fn clause_c_as_a_status_is_rejected_across_the_abi() {
+    // (c) is a count, not a status. Accepting a boolean here is the bug M1.5 fixed,
+    // and a foreign caller must get a usable message rather than a wrong category.
+    let result = call(&serde_json::json!({
+        "eoo_km2": 15000.0,
+        "clauses": [{ "sub": "c", "status": "met" }]
+    }));
+
+    let error = result["error"].as_str().expect("an error key");
+    assert!(
+        error.contains("locations"),
+        "error should name the fix: {error}"
     );
 }
 

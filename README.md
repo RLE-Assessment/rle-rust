@@ -18,10 +18,27 @@ Criterion B: EN (LC-EN)
 ```
 
 That range is the point. Criterion B needs a spatial threshold **and** at least one of
-sub-conditions (a) continuing decline, (b) threatening processes, or (c) few locations.
-`rle-python` notes this in a docstring; `redlistr` assigns no categories at all. Here it
-is typed, so "we have not checked" produces an honest range instead of a bare `EN` that
-overstates confidence. Say `--sub a=met` and you get `EN`.
+clause (a) continuing decline, (b) threatening processes, or (c) few threat-defined
+locations. `rle-python` notes this in a docstring; `redlistr` assigns no categories at
+all. Here it is typed, so "we have not checked" produces an honest range instead of a
+bare `EN` that overstates confidence — and the Guidelines ask for exactly this, at
+§6.3.2 p. 70: *"upper and lower bounds of the status under criterion B should be
+estimated by propagating both scenarios through the criteria."* Say `--clause a=met` and
+you get `EN`.
+
+**Clause (c) is a count, not a checkbox**, and it is category dependent — 1 threat-defined
+location for CR, ≤ 5 for EN, ≤ 10 for VU. So evaluation runs per level:
+
+```sh
+$ iucn-rle criterion-b --eoo-km2 1500 --clause a=not_met --clause b=not_met --locations 3
+Criterion B: EN
+
+  B1   EN             (thresholds alone: CR)
+```
+
+An EOO of 1,500 km² is in the CR band, but CR requires exactly one location. With three,
+only the EN clause is satisfied. Treating (c) as a boolean would report CR and overstate
+the threat by a full category.
 
 ## Why
 
@@ -81,6 +98,10 @@ Per-binding: `just python`, `just r`, `just wasm-node`, `just wasm-serve`.
 and JavaScript each run the identical file. Categories are compared as display strings,
 so `"EN (LC-EN)"` is one exact comparison in every language with no float tolerance to
 negotiate. A binding is not finished until it passes.
+
+Three cases come from the Guidelines' own published worked examples — Great Fish Thicket
+(Box 12, p. 69), Cape Flats Sand Fynbos and Coolibah-Black Box Woodland (Box 14, p. 75) —
+so the engine is checked against IUCN's own arithmetic, not only against itself.
 
 That is what makes "all the bindings agree" checkable rather than aspirational:
 

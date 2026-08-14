@@ -97,6 +97,25 @@ impl Category {
         }
     }
 
+    /// The official display colour, as `(red, green, blue)`.
+    ///
+    /// From IUCN (2024) Guidelines v2.0, Appendix 2 "Colour codes", p. 157. These are
+    /// the published values, not an approximation — reports and maps that use anything
+    /// else are not following the standard.
+    #[must_use]
+    pub const fn rgb(self) -> (u8, u8, u8) {
+        match self {
+            Self::Co => (0, 0, 0),
+            Self::Cr => (255, 0, 0),
+            Self::En => (255, 165, 0),
+            Self::Vu => (255, 255, 0),
+            Self::Nt => (173, 255, 47),
+            Self::Lc => (0, 128, 0),
+            Self::Dd => (128, 128, 128),
+            Self::Ne => (255, 255, 255),
+        }
+    }
+
     /// Whether this category counts as threatened (CO, CR, EN, or VU).
     ///
     /// `DD` and `NE` are the absence of an assessment rather than a finding of

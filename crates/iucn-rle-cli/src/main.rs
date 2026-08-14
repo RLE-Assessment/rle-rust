@@ -9,7 +9,9 @@
 #![allow(clippy::doc_markdown)]
 
 use clap::{Parser, Subcommand, ValueEnum};
-use iucn_rle_core::ffi::{criterion_b_from_parts, MetricInput, SubconditionInput};
+use iucn_rle_core::ffi::{
+    criterion_b_from_parts, MetricInput, SubconditionInput, SubconditionsInput,
+};
 use iucn_rle_core::Summary;
 
 #[derive(Parser)]
@@ -64,9 +66,25 @@ enum Command {
         #[arg(long, num_args = 2, value_names = ["LOWER", "UPPER"])]
         aoo_bounds: Option<Vec<f64>>,
 
-        /// Sub-condition status, repeatable, as a=met / b=not_met / c=not_assessed.
-        #[arg(long = "sub", value_name = "LETTER=STATUS")]
-        subs: Vec<String>,
+        /// Clause status, repeatable. CLAUSE is a, b, a.i, a.ii, a.iii or
+        /// b3_rapid_collapse; STATUS is met, not_met or not_assessed.
+        #[arg(long = "clause", value_name = "CLAUSE=STATUS")]
+        clauses: Vec<String>,
+
+        /// Clause (c): the number of threat-defined locations. A count, not a
+        /// status, because clause (c) is category dependent: 1 location for CR,
+        /// 5 or fewer for EN, 10 or fewer for VU.
+        #[arg(long)]
+        locations: Option<u32>,
+
+        /// No plausible threats exist, so clause (c) and B3 are not met. A
+        /// finding, distinct from simply omitting --locations.
+        #[arg(long)]
+        no_plausible_threats: bool,
+
+        /// Threats exist but their extent cannot be assessed: Data Deficient.
+        #[arg(long)]
+        locations_insufficient_information: bool,
 
         /// Output format.
         #[arg(long, value_enum, default_value_t = Format::Text)]
@@ -81,11 +99,12 @@ fn metric(best: Option<f64>, bounds: Option<&Vec<f64>>) -> Option<MetricInput> {
     })
 }
 
-fn parse_subs(subs: &[String]) -> Result<Vec<SubconditionInput>, String> {
-    subs.iter()
+fn parse_clauses(clauses: &[String]) -> Result<Vec<SubconditionInput>, String> {
+    clauses
+        .iter()
         .map(|entry| {
             let (sub, status) = entry.split_once('=').ok_or_else(|| {
-                format!("expected LETTER=STATUS, got {entry:?} (for example: --sub a=met)")
+                format!("expected CLAUSE=STATUS, got {entry:?} (for example: --clause a=met)")
             })?;
             Ok(SubconditionInput {
                 sub: sub.to_owned(),
@@ -144,13 +163,22 @@ fn run() -> Result<(), String> {
             aoo_cells,
             eoo_bounds,
             aoo_bounds,
-            subs,
+            clauses,
+            locations,
+            no_plausible_threats,
+            locations_insufficient_information,
             format,
         } => {
+            let subs = SubconditionsInput {
+                clauses: parse_clauses(&clauses)?,
+                locations,
+                no_plausible_threats,
+                locations_insufficient_information,
+            };
             let summary = criterion_b_from_parts(
                 metric(eoo_km2, eoo_bounds.as_ref()),
                 metric(aoo_cells, aoo_bounds.as_ref()),
-                &parse_subs(&subs)?,
+                subs,
             )?;
 
             match format {

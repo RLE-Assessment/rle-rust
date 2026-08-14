@@ -2,6 +2,15 @@
 #
 # Source: IUCN (2024) Guidelines for the application of IUCN Red List of
 # Ecosystems Categories and Criteria, Version 2.0.
+#   https://portals.iucn.org/library/node/51533
+#   https://portals.iucn.org/library/sites/library/files/documents/2024-021-En.pdf
+#
+# Every value below has been transcribed from that document and checked against it:
+# Section 6 "Criterion B. Restricted geographic distribution" (pp. 65-76) and
+# Appendix 1 "IUCN Red List of Ecosystems Criteria, Version 2.1" (pp. 154-155).
+#
+# Note the two version numbers are genuinely different and both matter: the
+# GUIDELINES are Version 2.0 (2024); the CRITERIA they codify are Version 2.1.
 #
 # This file is the auditable source of truth for every numeric breakpoint in the
 # library. It is deliberately data rather than code so that a reviewer who does
@@ -12,30 +21,50 @@
 # The Rust constants in src/thresholds.rs are checked against this file by
 # tests/thresholds_match_toml.rs, so the two cannot drift.
 #
-# Semantics, matching rle-python's `_category_for` (rle.py:103-114):
+# Semantics:
 #   * `max` is an INCLUSIVE upper bound: a value <= max meets that category.
 #   * Breakpoints are evaluated in order and the first match wins.
 #   * A value above every breakpoint yields `above_all`.
-#   * NT is never emitted: it is a judgement call with no numeric breakpoint.
+#
+# NT is not produced by any table here. It is NOT, however, unreachable: Box 13
+# step 6(iv) (p. 72) describes a conditional Near Threatened pathway for B1(c),
+# B2(c) and B3. That rule turns on judgements the engine cannot make - whether
+# information is "insufficient", and whether less than 30% of the distribution is
+# unthreatened - so the library surfaces a note rather than deciding.
 
-schema_version = 1
+schema_version = 2
 guidelines_version = "2.0"
 guidelines_year = 2024
+criteria_version = "2.1"
 citation = "IUCN (2024) Guidelines for the application of IUCN Red List of Ecosystems Categories and Criteria, Version 2.0"
 
 # --- Criterion B: restricted geographic distribution -------------------------
 #
-# IMPORTANT: these are the SPATIAL thresholds only. A final listing under B1 or
-# B2 additionally requires at least one of sub-conditions (a) continuing
-# decline, (b) threatening processes, or (c) few threat-defined locations. The
-# library models that gate explicitly rather than in prose; see
-# src/subcondition.rs.
+# The spatial thresholds alone do NOT produce a listing. B1 and B2 each require
+# the metric threshold AND at least one of clauses (a), (b) or (c):
+#
+#   (a) An observed or inferred continuing decline in ANY OF:
+#         i.   a measure of spatial extent appropriate to the ecosystem; OR
+#         ii.  a measure of environmental quality appropriate to the
+#              characteristic biota of the ecosystem; OR
+#         iii. a measure of biotic interactions appropriate to the
+#              characteristic biota of the ecosystem.
+#   (b) Observed or inferred threatening processes that are likely to cause
+#       continuing declines in geographic distribution, environmental quality or
+#       biotic interactions within the next 20 years.
+#   (c) Ecosystem exists at few threat-defined locations - see `location_bounds`.
+#
+# CLAUSE (c) IS CATEGORY DEPENDENT. This is why evaluation must run per level
+# rather than picking a threshold category from the metric and then applying a
+# boolean gate: an ecosystem with an EOO of 1,500 km2 (the CR band) but three
+# threat-defined locations fails (c) at CR (which demands exactly 1) and meets it
+# at EN (<= 5), so the listing is EN, not CR.
 
 [[criterion]]
 id = "B1"
 metric = "eoo_km2"
-metric_description = "Extent of occurrence, the area of a minimum convex polygon enclosing all occurrences, in square kilometres"
-source = "Section 6.2, p.66"
+metric_description = "Area of a minimum convex polygon enclosing all occurrences (extent of occurrence, EOO), in square kilometres"
+source = "Appendix 1, p. 154; Section 6.2, pp. 65-66"
 direction = "smaller_is_worse"
 bound = "inclusive_upper"
 above_all = "LC"
@@ -46,12 +75,19 @@ breakpoints = [
     { max = 20_000, category = "EN" },
     { max = 50_000, category = "VU" },
 ]
+# Clause (c): "Ecosystem exists at 1 threat-defined location" (CR), "<= 5" (EN),
+# "<= 10" (VU).
+location_bounds = [
+    { max_locations = 1, category = "CR" },
+    { max_locations = 5, category = "EN" },
+    { max_locations = 10, category = "VU" },
+]
 
 [[criterion]]
 id = "B2"
 metric = "aoo_cells"
-metric_description = "Area of occupancy, the number of occupied 10x10 km grid cells after the 1% small-patch exclusion"
-source = "Section 6.2, p.66"
+metric_description = "Number of occupied 10 x 10 km grid cells (area of occupancy, AOO), after the 1% small-patch exclusion"
+source = "Appendix 1, p. 155; Section 6.2, pp. 65-66"
 direction = "smaller_is_worse"
 bound = "inclusive_upper"
 above_all = "LC"
@@ -62,9 +98,43 @@ breakpoints = [
     { max = 20, category = "EN" },
     { max = 50, category = "VU" },
 ]
+# "AND at least one of a-c above (same as for B1)."
+location_bounds = [
+    { max_locations = 1, category = "CR" },
+    { max_locations = 5, category = "EN" },
+    { max_locations = 10, category = "VU" },
+]
 
-# B3, and Criteria A, C, and D, are deliberately absent. Their thresholds have
-# not yet been transcribed and verified against the Guidelines, and inventing
-# them would defeat the purpose of this file. Criterion E is a bespoke
-# stochastic simulation per ecosystem and will never have a table here; the
-# library accepts a caller-supplied collapse probability instead.
+# B3 has no spatial metric. It is driven entirely by two limbs, BOTH of which
+# must hold (Appendix 1 p. 155; Section 6.3.3 p. 75):
+#
+#   1. "Very small (generally fewer than 5 threat-defined locations)"
+#   2. "AND prone to the effects of human activities or stochastic events within
+#      a very short time period in an uncertain future, and thus capable of
+#      Collapse or becoming Critically Endangered within a very short time
+#      period"
+#
+# "The highest category that can be invoked by subcriterion B3 is Vulnerable
+# (i.e. ecosystem types are not eligible for Critically Endangered or Endangered
+# status under criterion B3)." - Section 6.3.3, p. 75.
+[[criterion]]
+id = "B3"
+metric = "none"
+metric_description = "No spatial metric; assessed from threat-defined locations and capability of rapid collapse"
+source = "Appendix 1, p. 155; Section 6.3.3, p. 75"
+direction = "smaller_is_worse"
+bound = "inclusive_upper"
+above_all = "LC"
+never_emit = ["NT", "CR", "EN"]
+requires_any_subcondition = []
+breakpoints = []
+location_bounds = [
+    { max_locations = 4, category = "VU" },
+]
+
+# Criteria A, C, D and E are deliberately absent. Their thresholds are legible in
+# Appendix 1 (pp. 154-156) but have not been wired to evaluation code or tests
+# yet, and transcribing numbers that nothing exercises is how an unverified value
+# slips in. They arrive with their own milestones. Criterion E will never have a
+# table here: it is a bespoke per-ecosystem stochastic simulation, and the library
+# accepts a caller-supplied collapse probability instead.

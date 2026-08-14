@@ -7,7 +7,10 @@
 criterion_b(
   eoo_km2 = NULL,
   aoo_cells = NULL,
-  subconditions = character(0),
+  clauses = character(0),
+  locations = NULL,
+  no_plausible_threats = FALSE,
+  locations_insufficient_information = FALSE,
   eoo_bounds = NULL,
   aoo_bounds = NULL
 )
@@ -17,8 +20,18 @@ criterion_b(
 
 \item{aoo_cells}{Occupied 10x10 km cells after the 1\% exclusion (B2).}
 
-\item{subconditions}{Named character vector, e.g. \code{c(a = "met")}. Values must
-be one of \code{"met"}, \code{"not_met"}, or \code{"not_assessed"}.}
+\item{clauses}{Named character vector, e.g. \code{c(a = "met")}. Names may be
+\code{"a"} (or its aspects \code{"a.i"}, \code{"a.ii"}, \code{"a.iii"}), \code{"b"}, or
+\code{"b3_rapid_collapse"}. Values must be \code{"met"}, \code{"not_met"} or
+\code{"not_assessed"}.}
+
+\item{locations}{Clause (c): the number of threat-defined locations.}
+
+\item{no_plausible_threats}{No plausible threats exist, so clause (c) and B3
+are \emph{not met}. A finding, distinct from omitting \code{locations}.}
+
+\item{locations_insufficient_information}{Threats exist but their extent
+cannot be assessed, yielding Data Deficient.}
 
 \item{eoo_bounds}{Optional length-2 numeric of plausible EOO bounds.}
 
@@ -30,18 +43,29 @@ and the provenance needed to reproduce the result.
 }
 \description{
 Criterion B covers restricted geographic distribution. The spatial thresholds
-alone do not produce a listing: at least one of sub-conditions (a) continuing
-decline, (b) threatening processes, or (c) few threat-defined locations must
-also hold.
+alone do not produce a listing: at least one of clause (a) continuing decline,
+(b) threatening processes, or (c) few threat-defined locations must also hold.
 }
 \details{
-Sub-conditions you do not name count as \emph{not assessed}, which is deliberately
-different from \emph{not met}. An ecosystem whose metrics say EN but whose
-sub-conditions nobody has examined is reported as \code{"EN (LC-EN)"}, not a bare
-\code{"EN"} that would overstate confidence.
+Clauses you do not name count as \emph{not assessed}, which is deliberately
+different from \emph{not met}. An ecosystem whose metrics say EN but whose clauses
+nobody has examined is reported as \code{"EN (LC-EN)"}, not a bare \code{"EN"} that
+would overstate confidence.
+
+Clause (c) is supplied as \code{locations}, a \strong{count}, because it is category
+dependent: 1 threat-defined location for CR, 5 or fewer for EN, 10 or fewer
+for VU (IUCN 2024 Guidelines v2.0, Appendix 1, pp. 154-155).
 }
 \examples{
 criterion_b(eoo_km2 = 15000)$overall
-criterion_b(eoo_km2 = 15000, subconditions = c(a = "met"))$overall
+criterion_b(eoo_km2 = 15000, clauses = c(a = "met"))$overall
+
+# Clause (c) is category dependent: an EOO of 1500 km2 is in the CR band, but
+# CR requires exactly one threat-defined location, so three qualifies at EN.
+criterion_b(
+  eoo_km2 = 1500,
+  clauses = c(a = "not_met", b = "not_met"),
+  locations = 3
+)$criteria[[1]]$category
 
 }

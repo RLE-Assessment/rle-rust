@@ -12,8 +12,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    criterion_b, Basis, ConditionStatus, Estimate, Subcondition, SubconditionAssessment, Summary,
-    ThresholdTable,
+    criterion_b, Basis, ConditionStatus, DeclineAspect, Estimate, Subconditions, Summary,
+    ThreatLocations, ThresholdTable,
 };
 
 /// A metric value with optional plausible bounds, as supplied by a caller.
@@ -61,40 +61,117 @@ impl MetricInput {
     }
 }
 
-/// A sub-condition and its status, as supplied by a caller.
+/// A clause and its status, as supplied by a caller.
+///
+/// `sub` accepts `"a"` or `"b"`, the decline aspects `"a.i"` / `"a.ii"` / `"a.iii"`,
+/// or `"b3_rapid_collapse"` for B3's second limb. Clause (c) is **not** given here — it
+/// is a count of threat-defined locations, supplied via
+/// [`SubconditionsInput::locations`].
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct SubconditionInput {
-    /// `"a"`, `"b"`, `"c"`, or the `snake_case` name.
+    /// Which clause this concerns.
     pub sub: String,
     /// `"met"`, `"not_met"`, or `"not_assessed"`.
     pub status: String,
 }
 
+/// All Criterion B evidence, as supplied by a caller.
+#[derive(Clone, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SubconditionsInput {
+    /// Clause (a) aspects, clause (b), and B3's rapid-collapse limb.
+    pub clauses: Vec<SubconditionInput>,
+    /// Clause (c): the number of threat-defined locations, when counted.
+    pub locations: Option<u32>,
+    /// No plausible threats exist, so clause (c) and B3 are **not met** — a finding,
+    /// distinct from an absent count, which means nobody looked.
+    pub no_plausible_threats: bool,
+    /// Threats exist but their extent cannot be assessed: Data Deficient.
+    pub locations_insufficient_information: bool,
+}
+
+impl SubconditionsInput {
+    fn into_subconditions(self) -> Result<Subconditions, String> {
+        let mut subs = Subconditions::new();
+
+        for clause in &self.clauses {
+            let status: ConditionStatus = clause.status.parse().map_err(|e| format!("{e}"))?;
+            let key = clause.sub.trim().to_ascii_lowercase();
+            subs = match key.as_str() {
+                // A bare "a" sets every aspect, for callers that do not distinguish them.
+                "a" | "continuing_decline" => DeclineAspect::ALL
+                    .into_iter()
+                    .fold(subs, |acc, aspect| acc.with_decline(aspect, status)),
+                "b" | "threatening_processes" => subs.with_threatening_processes(status),
+                "b3_rapid_collapse" | "capable_of_rapid_collapse" => {
+                    subs.with_capable_of_rapid_collapse(status)
+                }
+                "c" | "few_locations" => {
+                    return Err("clause (c) is a count of threat-defined locations, not a \
+                                status; supply it as `locations` instead"
+                        .to_owned())
+                }
+                other => {
+                    let aspect: DeclineAspect = other
+                        .strip_prefix("a.")
+                        .unwrap_or(other)
+                        .parse()
+                        .map_err(|_| {
+                        format!(
+                            "unrecognised clause: {:?}; expected \
+                                     a|b|a.i|a.ii|a.iii|b3_rapid_collapse",
+                            clause.sub
+                        )
+                    })?;
+                    subs.with_decline(aspect, status)
+                }
+            };
+        }
+
+        let locations = match (
+            self.locations,
+            self.no_plausible_threats,
+            self.locations_insufficient_information,
+        ) {
+            (Some(_), true, _) | (Some(_), _, true) | (None, true, true) => {
+                return Err(
+                    "threat-defined locations are over-specified: give at most one of \
+                            a count, no_plausible_threats, or \
+                            locations_insufficient_information"
+                        .to_owned(),
+                )
+            }
+            (Some(n), _, _) => ThreatLocations::Count(n),
+            (None, true, false) => ThreatLocations::NoPlausibleThreats,
+            (None, false, true) => ThreatLocations::InsufficientInformation,
+            (None, false, false) => ThreatLocations::NotAssessed,
+        };
+
+        Ok(subs.with_locations(locations))
+    }
+}
+
 /// Assess Criterion B from loosely-typed input.
 ///
-/// Sub-conditions absent from `subconditions` count as **not assessed**, which
-/// is what produces a provisional range rather than a definite category.
+/// Anything not supplied counts as **not assessed**, which produces a provisional range
+/// rather than a definite category.
 ///
 /// # Errors
 ///
-/// Returns a human-readable message if a sub-condition letter or status is not
-/// recognised. Absent metrics are not an error; they yield `NE`.
+/// Returns a human-readable message if a clause name or status is not recognised, or if
+/// threat-defined locations are over-specified. Absent metrics are not an error; they
+/// yield `NE`.
 pub fn criterion_b_from_parts(
     eoo_km2: Option<MetricInput>,
     aoo_cells: Option<MetricInput>,
-    subconditions: &[SubconditionInput],
+    subconditions: SubconditionsInput,
 ) -> Result<Summary, String> {
-    let mut parsed = Vec::with_capacity(subconditions.len());
-    for input in subconditions {
-        let subcondition: Subcondition = input.sub.parse().map_err(|e| format!("{e}"))?;
-        let status: ConditionStatus = input.status.parse().map_err(|e| format!("{e}"))?;
-        parsed.push(SubconditionAssessment::new(subcondition, status));
-    }
+    let subs = subconditions.into_subconditions()?;
 
     let assessment = criterion_b(
         eoo_km2.map(MetricInput::into_estimate),
         aoo_cells.map(MetricInput::into_estimate),
-        &parsed,
+        &subs,
         ThresholdTable::v2_2024(),
     )
     .map_err(|e| format!("{e}"))?;

@@ -21,6 +21,7 @@ use serde::Deserialize;
 struct File {
     guidelines_version: String,
     guidelines_year: u32,
+    criteria_version: String,
     citation: String,
     criterion: Vec<Criterion>,
 }
@@ -32,11 +33,18 @@ struct Criterion {
     never_emit: Vec<String>,
     requires_any_subcondition: Vec<String>,
     breakpoints: Vec<Breakpoint>,
+    location_bounds: Vec<LocationBound>,
 }
 
 #[derive(Deserialize)]
 struct Breakpoint {
     max: f64,
+    category: String,
+}
+
+#[derive(Deserialize)]
+struct LocationBound {
+    max_locations: u32,
     category: String,
 }
 
@@ -51,6 +59,7 @@ fn metadata_matches() {
 
     assert_eq!(file.guidelines_version, table.guidelines_version());
     assert_eq!(file.guidelines_year, table.guidelines_year());
+    assert_eq!(file.criteria_version, table.criteria_version());
     assert_eq!(file.citation, table.citation());
 }
 
@@ -90,6 +99,26 @@ fn every_criterion_in_the_file_is_compiled_in() {
                 from_file.max
             );
         }
+
+        // Clause (c) is category dependent, so these bounds are as load-bearing as
+        // the spatial ones and just as easy to get wrong.
+        assert_eq!(
+            rule.location_bounds.len(),
+            criterion.location_bounds.len(),
+            "{id}: location bound count disagrees"
+        );
+        for (compiled, from_file) in rule.location_bounds.iter().zip(&criterion.location_bounds) {
+            assert_eq!(
+                compiled.max_locations, from_file.max_locations,
+                "{id}: location bound disagrees"
+            );
+            assert_eq!(
+                compiled.category,
+                from_file.category.parse::<Category>().unwrap(),
+                "{id}: category at location bound {} disagrees",
+                from_file.max_locations
+            );
+        }
     }
 }
 
@@ -125,6 +154,14 @@ fn no_criterion_can_emit_a_category_it_declares_it_never_emits() {
                     breakpoint.category, banned,
                     "{id}: breakpoint at {} yields banned category {banned}",
                     breakpoint.max
+                );
+            }
+            // B3 declares it never emits CR or EN, per Section 6.3.3 p. 75.
+            for bound in rule.location_bounds {
+                assert_ne!(
+                    bound.category, banned,
+                    "{id}: location bound at {} yields banned category {banned}",
+                    bound.max_locations
                 );
             }
         }

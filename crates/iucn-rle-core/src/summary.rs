@@ -82,10 +82,7 @@ impl core::fmt::Display for Note {
                  so this criterion is not triggered",
             ),
             Self::SubconditionsNotAssessed { pending } => {
-                let letters: Vec<String> = pending
-                    .iter()
-                    .map(|s| format!("({})", s.letter()))
-                    .collect();
+                let letters: Vec<String> = pending.iter().map(|s| format!("({s})")).collect();
                 write!(
                     f,
                     "sub-condition{} {} not assessed, so the listing is provisional",
@@ -93,6 +90,23 @@ impl core::fmt::Display for Note {
                     letters.join(", ")
                 )
             }
+            Self::LocationsInsufficientInformation => f.write_str(
+                "threats exist but the number of threat-defined locations could not be \
+                 assessed, so this sub-criterion is Data Deficient",
+            ),
+            Self::B3NotAssessed => f.write_str(
+                "B3 requires both very few threat-defined locations and capability of rapid \
+                 collapse; at least one limb is unassessed",
+            ),
+            Self::NearThreatenedMayApply {
+                locations,
+                max_locations,
+            } => write!(
+                f,
+                "with {locations} threat-defined locations (<= {max_locations}), Near Threatened \
+                 may apply under Guidelines Box 13 step 6(iv) if information is insufficient and \
+                 less than 30% of the distribution is unthreatened"
+            ),
         }
     }
 }

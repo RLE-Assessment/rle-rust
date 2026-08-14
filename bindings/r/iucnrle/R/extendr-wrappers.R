@@ -19,9 +19,10 @@ rle_thresholds_sha256 <- function() .Call(wrap__rle_thresholds_sha256)
 
 #' Assess IUCN RLE Criterion B, returning a JSON summary.
 #'
-#' Sub-conditions arrive as two parallel character vectors so the interface
-#' stays a plain R vector pair rather than a list of lists.
+#' Clauses arrive as two parallel character vectors so the interface stays a plain
+#' R vector pair rather than a list of lists. Clause (c) is separate because it is a
+#' count of threat-defined locations, not a status.
 #' @export
-rle_criterion_b_json <- function(eoo_km2, aoo_cells, sub_names, sub_statuses, eoo_lower_km2, eoo_upper_km2, aoo_lower_cells, aoo_upper_cells) .Call(wrap__rle_criterion_b_json, eoo_km2, aoo_cells, sub_names, sub_statuses, eoo_lower_km2, eoo_upper_km2, aoo_lower_cells, aoo_upper_cells)
+rle_criterion_b_json <- function(eoo_km2, aoo_cells, clause_names, clause_statuses, locations, no_plausible_threats, locations_insufficient_information, eoo_lower_km2, eoo_upper_km2, aoo_lower_cells, aoo_upper_cells) .Call(wrap__rle_criterion_b_json, eoo_km2, aoo_cells, clause_names, clause_statuses, locations, no_plausible_threats, locations_insufficient_information, eoo_lower_km2, eoo_upper_km2, aoo_lower_cells, aoo_upper_cells)
 
 # nolint end

@@ -18,6 +18,21 @@ pub struct Breakpoint {
     pub category: Category,
 }
 
+/// The maximum number of threat-defined locations that satisfies clause (c) at a
+/// given category.
+///
+/// Clause (c) is **category dependent** — Appendix 1, pp. 154-155 reads "Ecosystem
+/// exists at 1 threat-defined location" for CR, "<= 5" for EN and "<= 10" for VU. This
+/// is why Criterion B must be evaluated per level rather than by picking a threshold
+/// category from the metric and then applying a boolean gate.
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub struct LocationBound {
+    /// The category this bound applies at.
+    pub category: Category,
+    /// Inclusive maximum number of threat-defined locations.
+    pub max_locations: u32,
+}
+
 /// The threshold rule for one sub-criterion.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct CriterionThresholds {
@@ -29,6 +44,8 @@ pub struct CriterionThresholds {
     pub above_all: Category,
     /// Whether a listing additionally requires sub-condition (a), (b), or (c).
     pub requires_subcondition: bool,
+    /// Clause (c) bounds, per category. Empty when the sub-criterion has no clause (c).
+    pub location_bounds: &'static [LocationBound],
 }
 
 /// Raised when a criterion has no threshold table.
@@ -76,24 +93,59 @@ const B2_BREAKPOINTS: &[Breakpoint] = &[
     },
 ];
 
+// Clause (c), shared by B1 and B2: Appendix 1, pp. 154-155.
+const CLAUSE_C_BOUNDS: &[LocationBound] = &[
+    LocationBound {
+        category: Category::Cr,
+        max_locations: 1,
+    },
+    LocationBound {
+        category: Category::En,
+        max_locations: 5,
+    },
+    LocationBound {
+        category: Category::Vu,
+        max_locations: 10,
+    },
+];
+
+/// B3's first limb: "Very small (generally fewer than 5 threat-defined locations)".
+/// B3 can only ever yield VU (Section 6.3.3, p. 75).
+const B3_BOUNDS: &[LocationBound] = &[LocationBound {
+    category: Category::Vu,
+    max_locations: 4,
+}];
+
 const V2_2024_CRITERIA: &[CriterionThresholds] = &[
     CriterionThresholds {
         criterion: CriterionId::B1,
         breakpoints: B1_BREAKPOINTS,
         above_all: Category::Lc,
         requires_subcondition: true,
+        location_bounds: CLAUSE_C_BOUNDS,
     },
     CriterionThresholds {
         criterion: CriterionId::B2,
         breakpoints: B2_BREAKPOINTS,
         above_all: Category::Lc,
         requires_subcondition: true,
+        location_bounds: CLAUSE_C_BOUNDS,
+    },
+    CriterionThresholds {
+        criterion: CriterionId::B3,
+        // B3 has no spatial metric; it is driven entirely by location count plus the
+        // capable-of-rapid-collapse limb.
+        breakpoints: &[],
+        above_all: Category::Lc,
+        requires_subcondition: false,
+        location_bounds: B3_BOUNDS,
     },
 ];
 
 static V2_2024: ThresholdTable = ThresholdTable {
     guidelines_version: "2.0",
     guidelines_year: 2024,
+    criteria_version: "2.1",
     citation: "IUCN (2024) Guidelines for the application of IUCN Red List of \
                Ecosystems Categories and Criteria, Version 2.0",
     criteria: V2_2024_CRITERIA,
@@ -104,6 +156,7 @@ static V2_2024: ThresholdTable = ThresholdTable {
 pub struct ThresholdTable {
     guidelines_version: &'static str,
     guidelines_year: u32,
+    criteria_version: &'static str,
     citation: &'static str,
     criteria: &'static [CriterionThresholds],
 }
@@ -134,6 +187,15 @@ impl ThresholdTable {
     #[must_use]
     pub const fn guidelines_year(&self) -> u32 {
         self.guidelines_year
+    }
+
+    /// The version of the *Criteria* codified by this edition of the Guidelines.
+    ///
+    /// Deliberately distinct from [`Self::guidelines_version`]: Guidelines v2.0 (2024)
+    /// codifies Criteria v2.1 (Appendix 1, p. 154).
+    #[must_use]
+    pub const fn criteria_version(&self) -> &'static str {
+        self.criteria_version
     }
 
     /// The full citation for the Guidelines edition.
@@ -183,6 +245,52 @@ impl ThresholdTable {
             .iter()
             .find(|b| value <= b.max)
             .map_or(rule.above_all, |b| b.category))
+    }
+
+    /// The categories a sub-criterion can reach, most threatened first.
+    ///
+    /// Criterion B is evaluated level by level because clause (c) is category
+    /// dependent, so callers need the ladder rather than a single answer.
+    #[must_use]
+    pub fn levels(&self, criterion: CriterionId) -> Vec<Category> {
+        self.rule(criterion).map_or_else(Vec::new, |rule| {
+            let mut levels: Vec<Category> = rule
+                .breakpoints
+                .iter()
+                .map(|b| b.category)
+                .chain(rule.location_bounds.iter().map(|b| b.category))
+                .collect();
+            levels.sort_unstable();
+            levels.dedup();
+            levels
+        })
+    }
+
+    /// Whether `value` meets this sub-criterion's spatial threshold at `level`.
+    ///
+    /// A sub-criterion with no breakpoints (B3) has no spatial threshold, so every
+    /// level passes and the outcome rests entirely on the sub-conditions.
+    #[must_use]
+    pub fn metric_meets(&self, criterion: CriterionId, level: Category, value: f64) -> bool {
+        self.rule(criterion).is_some_and(|rule| {
+            rule.breakpoints.is_empty()
+                || rule
+                    .breakpoints
+                    .iter()
+                    .any(|b| b.category == level && value <= b.max)
+        })
+    }
+
+    /// The inclusive maximum number of threat-defined locations satisfying clause (c)
+    /// at `level`, if this sub-criterion has a clause (c) at that level.
+    #[must_use]
+    pub fn max_locations(&self, criterion: CriterionId, level: Category) -> Option<u32> {
+        self.rule(criterion).and_then(|rule| {
+            rule.location_bounds
+                .iter()
+                .find(|b| b.category == level)
+                .map(|b| b.max_locations)
+        })
     }
 
     /// Classify an estimate, carrying its uncertainty into the category.

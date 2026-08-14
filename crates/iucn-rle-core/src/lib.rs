@@ -33,7 +33,7 @@ pub use criteria::criterion_b;
 pub use criterion::{CriterionId, ParseCriterionError};
 pub use estimate::{Basis, Estimate};
 pub use subcondition::{
-    ConditionStatus, ParseSubconditionError, Subcondition, SubconditionAssessment,
+    ConditionStatus, DeclineAspect, ParseSubconditionError, Subconditions, ThreatLocations,
 };
 pub use summary::{CriterionSummary, Summary};
 pub use thresholds::{NoThresholdTable, ThresholdTable};

@@ -16,7 +16,9 @@
 //! payload is tens of values, so the serialisation cost is irrelevant, and it
 //! keeps one flattening (`iucn_rle_core::Summary`) shared by all five bindings.
 
-use iucn_rle_core::ffi::{criterion_b_from_parts, MetricInput, SubconditionInput};
+use iucn_rle_core::ffi::{
+    criterion_b_from_parts, MetricInput, SubconditionInput, SubconditionsInput,
+};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -52,28 +54,39 @@ fn metric(best: Option<f64>, lower: Option<f64>, upper: Option<f64>) -> Option<M
 #[pyo3(signature = (
     eoo_km2 = None,
     aoo_cells = None,
-    subconditions = None,
+    clauses = None,
+    locations = None,
+    no_plausible_threats = false,
+    locations_insufficient_information = false,
     eoo_lower_km2 = None,
     eoo_upper_km2 = None,
     aoo_lower_cells = None,
     aoo_upper_cells = None,
 ))]
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 fn criterion_b_json(
     py: Python<'_>,
     eoo_km2: Option<f64>,
     aoo_cells: Option<f64>,
-    subconditions: Option<Vec<(String, String)>>,
+    clauses: Option<Vec<(String, String)>>,
+    locations: Option<u32>,
+    no_plausible_threats: bool,
+    locations_insufficient_information: bool,
     eoo_lower_km2: Option<f64>,
     eoo_upper_km2: Option<f64>,
     aoo_lower_cells: Option<f64>,
     aoo_upper_cells: Option<f64>,
 ) -> PyResult<String> {
-    let subs: Vec<SubconditionInput> = subconditions
-        .unwrap_or_default()
-        .into_iter()
-        .map(|(sub, status)| SubconditionInput { sub, status })
-        .collect();
+    let subs = SubconditionsInput {
+        clauses: clauses
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(sub, status)| SubconditionInput { sub, status })
+            .collect(),
+        locations,
+        no_plausible_threats,
+        locations_insufficient_information,
+    };
 
     let eoo = metric(eoo_km2, eoo_lower_km2, eoo_upper_km2);
     let aoo = metric(aoo_cells, aoo_lower_cells, aoo_upper_cells);
@@ -82,7 +95,7 @@ fn criterion_b_json(
     // contract must hold from the first function so callers can rely on
     // `asyncio.to_thread` working once the I/O paths land.
     let summary = py
-        .detach(|| criterion_b_from_parts(eoo, aoo, &subs))
+        .detach(|| criterion_b_from_parts(eoo, aoo, subs))
         .map_err(PyValueError::new_err)?;
 
     serde_json::to_string(&summary)
