@@ -6,7 +6,6 @@
 //! results, because a reader that returns the right answer after downloading everything
 //! is still the bug this milestone exists to fix.
 #![allow(clippy::float_cmp)]
-
 // Byte offsets are u64 because a remote object can exceed 4 GB, but these fixtures are
 // a few kilobytes and the tests run on 64-bit hosts, so narrowing them to index a Vec is
 // exact here.

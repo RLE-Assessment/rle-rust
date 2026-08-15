@@ -587,7 +587,9 @@ impl parquet::file::reader::ChunkReader for SparseBytes {
         for (offset, bytes) in &self.chunks {
             let chunk_end = offset + bytes.len() as u64;
             if start >= *offset && start < chunk_end {
-                let Ok(from) = usize::try_from(start - offset) else { continue };
+                let Ok(from) = usize::try_from(start - offset) else {
+                    continue;
+                };
                 return Ok(bytes.slice(from..).reader());
             }
         }
