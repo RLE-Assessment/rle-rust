@@ -362,6 +362,123 @@ impl AooAccumulator {
     }
 }
 
+/// A window of raster pixels, already in the AOO grid's CRS.
+///
+/// This is the bring-your-own-data path: a caller hands over an array they already
+/// have — a numpy array, `terra` values, a JavaScript typed array — with no file and
+/// no URL involved. Nothing is copied; the accumulator reads the slice in place.
+///
+/// # The CRS requirement
+///
+/// The raster must already be in [`crate::grid::AOO_CRS`]. That is not a shortcut for
+/// the implementation's benefit: when the raster shares the grid's plane, pixels and
+/// cells are both axis-aligned rectangles, so their overlap is an exact interval
+/// intersection with no clipping and no approximation. A raster in geographic
+/// coordinates would have curved pixel edges in the grid's plane, and every pixel
+/// would need approximating. `rle-python` takes the same approach, reprojecting to
+/// ESRI:54034 before any zonal statistics.
+///
+/// # Pixel values
+///
+/// Each value is the ecosystem's **fractional coverage** of that pixel, in `0.0..=1.0`.
+/// A binary mask is the special case where every value is 0 or 1. Non-finite values
+/// are treated as nodata, and negatives are ignored rather than allowed to subtract
+/// extent.
+pub struct RasterWindow<'a> {
+    /// Row-major pixel values: fractional coverage of the ecosystem.
+    pub data: &'a [f64],
+    /// Pixels per row.
+    pub width: usize,
+    /// Number of rows.
+    pub height: usize,
+    /// X coordinate of the window's outer edge, in projected metres.
+    pub origin_x: f64,
+    /// Y coordinate of the window's outer edge, in projected metres.
+    pub origin_y: f64,
+    /// Pixel width in metres, positive for west-to-east rows.
+    pub pixel_width: f64,
+    /// Pixel height in metres. **Negative** for the usual north-up raster, where rows
+    /// run north to south.
+    pub pixel_height: f64,
+}
+
+impl RasterWindow<'_> {
+    /// The bounds of one pixel as `[min_x, min_y, max_x, max_y]`.
+    fn pixel_bounds(&self, col: usize, row: usize) -> [f64; 4] {
+        let x0 = self.pixel_width.mul_add(col as f64, self.origin_x);
+        let y0 = self.pixel_height.mul_add(row as f64, self.origin_y);
+        let x1 = x0 + self.pixel_width;
+        let y1 = y0 + self.pixel_height;
+        // Normalise, since either step can be negative depending on row order.
+        [x0.min(x1), y0.min(y1), x0.max(x1), y0.max(y1)]
+    }
+}
+
+/// Area shared by two axis-aligned rectangles.
+///
+/// Exact and closed-form — the reason the raster is required to be in the grid's CRS.
+fn rectangle_overlap(a: [f64; 4], b: [f64; 4]) -> f64 {
+    let width = (a[2].min(b[2]) - a[0].max(b[0])).max(0.0);
+    let height = (a[3].min(b[3]) - a[1].max(b[1])).max(0.0);
+    width * height
+}
+
+impl AooAccumulator {
+    /// Add a window of raster pixels, in the AOO grid's CRS.
+    ///
+    /// ```
+    /// use iucn_rle_core::aoo::{AooAccumulator, RasterWindow};
+    ///
+    /// // One fully-occupied 1 km pixel.
+    /// let data = [1.0];
+    /// let mut acc = AooAccumulator::new();
+    /// acc.add_raster("forest", &RasterWindow {
+    ///     data: &data,
+    ///     width: 1,
+    ///     height: 1,
+    ///     origin_x: 1_000.0,
+    ///     origin_y: 2_000.0,
+    ///     pixel_width: 1_000.0,
+    ///     pixel_height: -1_000.0,
+    /// });
+    ///
+    /// assert_eq!(acc.finish().aoo("forest").occupied_cell_count, 1);
+    /// ```
+    pub fn add_raster(&mut self, ecosystem: &str, window: &RasterWindow<'_>) {
+        if window.width == 0 || window.height == 0 || window.data.is_empty() {
+            return;
+        }
+
+        let id = self.id_for(ecosystem);
+
+        for row in 0..window.height {
+            for col in 0..window.width {
+                let Some(&coverage) = window.data.get(row * window.width + col) else {
+                    continue;
+                };
+                // Non-finite is nodata; negative coverage would subtract extent and
+                // silently understate the AOO, so both are skipped rather than used.
+                if !coverage.is_finite() || coverage <= 0.0 {
+                    continue;
+                }
+
+                let pixel = window.pixel_bounds(col, row);
+
+                // A pixel usually sits inside one cell, but may straddle up to four.
+                for cell in CellId::covering(pixel) {
+                    let overlap = rectangle_overlap(pixel, cell.bounds());
+                    if overlap > 0.0 {
+                        self.cells
+                            .entry((id, cell))
+                            .or_default()
+                            .add(overlap * coverage);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Bounding box of a set of rings, or `None` when there is nothing to bound.
 fn bounding_box(rings: &[Vec<[f64; 2]>]) -> Option<[f64; 4]> {
     let (mut min_x, mut min_y) = (f64::INFINITY, f64::INFINITY);

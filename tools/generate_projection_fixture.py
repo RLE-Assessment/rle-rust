@@ -96,7 +96,7 @@ def build() -> dict:
     }
 
 
-def check(tolerance_m: float = 1e-9) -> int:
+def check(tolerance_m: float = 1e-6) -> int:
     """Verify the committed coordinates still match what PROJ produces.
 
     Compares the numbers, not the file bytes. A byte comparison would also fail on
@@ -106,6 +106,15 @@ def check(tolerance_m: float = 1e-9) -> int:
 
     What this catches is the thing worth catching: PROJ actually returning different
     coordinates for the same input.
+
+    On the tolerance. MEASURED cross-platform variation is 1.863e-9 m, at the north
+    pole, between PROJ on macOS and on a Linux CI runner — libm rounding where the
+    authalic term saturates, not a difference in method. One micrometre is roughly a
+    thousand times that, and still absurdly tight for a projection: any genuine
+    change in PROJ's answers would be orders of magnitude larger.
+
+    A tolerance below the platform noise floor produces a check that fails for
+    reasons no one can act on, which is worse than no check at all.
     """
     if not OUTPUT.exists():
         print(f"error: {OUTPUT.relative_to(ROOT)} does not exist", file=sys.stderr)
