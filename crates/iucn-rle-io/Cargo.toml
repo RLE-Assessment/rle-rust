@@ -1,0 +1,42 @@
+[package]
+name = "iucn-rle-io"
+description = "Byte-range readers for IUCN Red List of Ecosystems data sources"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+# The ONLY async in the project lives here. Everything above this crate parses
+# synchronously over in-memory bytes, which is what keeps `Send` bounds out of the
+# decoders and lets the whole stack target WebAssembly.
+[dependencies]
+async-trait = "0.1"
+bytes = "1"
+thiserror = { workspace = true }
+
+# reqwest is the one HTTP client covering both native and the browser: on
+# wasm32-unknown-unknown it dispatches through the Fetch API. object_store is
+# deliberately absent — its cloud transports do not compile for wasm32, and
+# deny.toml bans it outright so a transitive pull cannot reintroduce it.
+[dependencies.reqwest]
+version = "0.12"
+default-features = false
+optional = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.reqwest]
+version = "0.12"
+default-features = false
+features = ["rustls-tls"]
+optional = true
+
+[features]
+default = ["http"]
+http = ["dep:reqwest"]
+
+[dev-dependencies]
+futures = { version = "0.3", default-features = false, features = ["executor"] }
+
+[lints]
+workspace = true

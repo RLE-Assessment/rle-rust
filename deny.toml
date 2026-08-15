@@ -15,6 +15,12 @@ allow = [
     "ISC",
     "Unicode-3.0",
     "Zlib",
+    # Covers webpki-roots, the Mozilla CA certificate bundle reqwest uses for TLS.
+    # A *data* licence rather than a code one, which is why it was not on this list
+    # originally. Checked before adding: CDLA-Permissive-2.0 has no copyleft, no
+    # share-alike, and no attribution-by-name requirement — the only obligation is
+    # to carry the licence text with the data, exactly as MIT requires.
+    "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.9
 

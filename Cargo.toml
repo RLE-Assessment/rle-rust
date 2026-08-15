@@ -4,6 +4,7 @@ members = [
     "crates/iucn-rle-core",
     "crates/iucn-rle-capi",
     "crates/iucn-rle-cli",
+    "crates/iucn-rle-io",
     "bindings/python",
     "bindings/wasm",
 ]
