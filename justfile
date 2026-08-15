@@ -95,7 +95,7 @@ conformance-python: python
 
 # Run the conformance corpus through the WASM binding under Node.
 conformance-js: wasm-node
-    node --test {{root}}/js/conformance.mjs
+    node --test {{root}}/js/conformance.mjs {{root}}/js/golden.mjs
 
 # Run the conformance corpus through the R binding.
 conformance-r:

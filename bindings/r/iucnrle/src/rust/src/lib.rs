@@ -10,7 +10,8 @@
 
 use extendr_api::prelude::*;
 use iucn_rle_core::ffi::{
-    criterion_b_from_parts, MetricInput, SubconditionInput, SubconditionsInput,
+    criterion_b_from_parts, distribution_metrics, MetricInput, PolygonInput, SubconditionInput,
+    SubconditionsInput,
 };
 
 /// Version of the underlying iucn-rle-core calculation engine.
@@ -108,6 +109,23 @@ fn rle_criterion_b_json(
     serde_json::to_string(&summary).map_err(|e| Error::Other(e.to_string()))
 }
 
+/// Compute Criterion B spatial metrics from a distribution map, returning JSON.
+///
+/// Polygons arrive as a JSON array rather than as nested R lists. Walking a deeply
+/// nested SEXP structure across the FFI boundary would be far more code for no gain,
+/// and jsonlite is already a dependency of the R wrapper.
+/// @export
+#[extendr]
+fn rle_distribution_metrics_json(polygons_json: &str) -> Result<String, Error> {
+    let polygons: Vec<PolygonInput> = serde_json::from_str(polygons_json)
+        .map_err(|e| Error::Other(format!("invalid polygons: {e}")))?;
+
+    // Plain data throughout; no SEXP is touched until this returns.
+    let summary = distribution_metrics(&polygons).map_err(Error::Other)?;
+
+    serde_json::to_string(&summary).map_err(|e| Error::Other(e.to_string()))
+}
+
 // Registers the exported functions with R. See the matching C code in entrypoint.c.
 extendr_module! {
     mod iucnrle;
@@ -115,4 +133,5 @@ extendr_module! {
     fn rle_thresholds_toml;
     fn rle_thresholds_sha256;
     fn rle_criterion_b_json;
+    fn rle_distribution_metrics_json;
 }

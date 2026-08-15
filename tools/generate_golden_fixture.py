@@ -116,6 +116,23 @@ def build(rle_python: Path) -> dict:
         ],
         "features": features,
         "expected_cells": expected,
+        # Published rle-python output for this same dataset, from the committed
+        # workshop notebook rle_workshop/presentation-4-workflow-ruritania.ipynb,
+        # whose executed cells read "EOO is 73.2 km2" and "AOO is 4 cells".
+        #
+        # This is the only independent check on EOO: the golden parquet above holds
+        # the AOO grid alone. Recorded here so every language binding verifies it,
+        # not just the Rust tests.
+        "published_metrics": {
+            "source": (
+                "rle_workshop/presentation-4-workflow-ruritania.ipynb, "
+                "executed rle-python output"
+            ),
+            "eoo_tolerance_km2": 0.05,
+            "ecosystems": {
+                "T1.1.1": {"eoo_km2": 73.2, "aoo_cells": 4},
+            },
+        },
     }
 
 

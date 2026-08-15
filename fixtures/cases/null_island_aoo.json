@@ -1807,5 +1807,15 @@
         "M1.1.1": 0.19538268019919633
       }
     }
-  ]
+  ],
+  "published_metrics": {
+    "source": "rle_workshop/presentation-4-workflow-ruritania.ipynb, executed rle-python output",
+    "eoo_tolerance_km2": 0.05,
+    "ecosystems": {
+      "T1.1.1": {
+        "eoo_km2": 73.2,
+        "aoo_cells": 4
+      }
+    }
+  }
 }
