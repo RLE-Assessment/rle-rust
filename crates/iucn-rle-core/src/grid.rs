@@ -22,7 +22,11 @@ pub const AOO_CELL_SIZE_M: f64 = 10_000.0;
 pub const AOO_CRS: &str = "ESRI:54034";
 
 /// A cell in the global AOO grid, addressed by column and row.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+///
+/// Ordered by column then row, so collections of cells sort deterministically —
+/// output that gets committed to a repository and diffed must not depend on hash
+/// iteration order.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
 pub struct CellId {
     /// Column index; `0` is the cell whose left edge is the projection origin.
     pub col: i32,

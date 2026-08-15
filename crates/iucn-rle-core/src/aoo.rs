@@ -264,14 +264,16 @@ impl AooAccumulator {
 
     /// Add one polygon, in projected metres.
     ///
-    /// `rings` is the exterior ring followed by any holes. Holes must wind opposite
-    /// to the exterior; their opposite signed area then subtracts itself, with no
-    /// special-case handling.
+    /// `rings` is the exterior ring followed by any holes.
     ///
-    /// **Either winding convention is accepted.** `GeoJSON` specifies counter-clockwise
-    /// exteriors ([RFC 7946 §3.1.6]) while shapefiles use clockwise ones, and plenty
-    /// of real data follows neither. The exterior's own orientation sets the sign, so
-    /// the source format cannot change an assessment.
+    /// **A ring's role is decided by its position, not its winding.** `rings[0]` is
+    /// the exterior and `rings[1..]` are holes, whichever way each one happens to
+    /// wind. This matters because real data is inconsistent: `GeoJSON` specifies
+    /// counter-clockwise exteriors and clockwise holes ([RFC 7946 §3.1.6]),
+    /// shapefiles use the opposite, and plenty of files follow neither — the
+    /// `rle-python` golden dataset, for instance, winds *every* ring
+    /// counter-clockwise, holes included. Inferring role from winding would make
+    /// those holes add area instead of subtracting it.
     ///
     /// Only cells the polygon actually intersects are touched — its bounding box
     /// selects candidates, and clipping decides which of those really contribute.
@@ -285,20 +287,21 @@ impl AooAccumulator {
             return;
         };
 
-        // Normalise to a positive exterior. A clockwise exterior would otherwise make
-        // every contribution negative and be filtered away as unoccupied — silently
-        // yielding an empty result for an entire shapefile.
-        let orientation = if ring_area(exterior) < 0.0 { -1.0 } else { 1.0 };
+        // Normalise each ring so the exterior always adds and holes always subtract,
+        // regardless of how the source file wound them.
+        let sign = |ring: &Vec<[f64; 2]>| if ring_area(ring) < 0.0 { -1.0 } else { 1.0 };
+        let exterior_sign = sign(exterior);
+        let hole_signs: Vec<f64> = rings[1..].iter().map(sign).collect();
 
         let id = self.id_for(ecosystem);
 
         for cell in CellId::covering(bounds) {
             let rect = cell.bounds();
-            let mut area = 0.0;
-            for ring in rings {
-                area += clipped_area(ring, rect);
+
+            let mut area = clipped_area(exterior, rect) * exterior_sign;
+            for (hole, hole_sign) in rings[1..].iter().zip(&hole_signs) {
+                area -= clipped_area(hole, rect) * hole_sign;
             }
-            area *= orientation;
 
             // A cell can net to zero (fully inside a hole) or to a whisker of
             // negative float noise. Neither is occupancy.

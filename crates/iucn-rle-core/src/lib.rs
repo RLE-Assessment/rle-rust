@@ -21,6 +21,7 @@ pub mod category;
 pub mod category_range;
 pub mod criteria;
 pub mod criterion;
+pub mod distribution;
 pub mod eoo;
 pub mod estimate;
 pub mod ffi;
