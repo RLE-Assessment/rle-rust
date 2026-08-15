@@ -1,0 +1,289 @@
+{
+  "schema_version": 2,
+  "function": "criterion_b",
+  "guidelines_version": "2.0",
+  "criteria_version": "2.1",
+  "source": "IUCN (2024) Guidelines for the application of IUCN Red List of Ecosystems Categories and Criteria, Version 2.0. https://portals.iucn.org/library/node/51533",
+  "description": [
+    "Cross-language conformance cases for IUCN RLE Criterion B.",
+    "",
+    "Every language binding runs this identical file and must produce identical",
+    "output. Categories are compared as their DISPLAY STRINGS, so a range such as",
+    "'EN (LC-EN)' is a single exact string comparison in every language and there",
+    "is no float tolerance to negotiate.",
+    "",
+    "Clause (a) has three aspects, addressed as 'a.i' (spatial extent), 'a.ii'",
+    "(environmental quality) and 'a.iii' (biotic interactions); a bare 'a' sets all",
+    "three. Clause (b) is 'b'. B3's second limb is 'b3_rapid_collapse'.",
+    "",
+    "Clause (c) is NOT a status. It is a count of threat-defined locations, given",
+    "as `locations`, and it is CATEGORY DEPENDENT: 1 for CR, <=5 for EN, <=10 for",
+    "VU (Appendix 1, pp. 154-155). Absent evidence counts as NOT ASSESSED, which",
+    "is deliberately different from 'not met'."
+  ],
+  "cases": [
+    {
+      "id": "b1.boundary.2000.is_cr",
+      "why": "Bounds are inclusive: exactly 2000 km2 meets CR, not EN.",
+      "eoo_km2": 2000.0,
+      "clauses": [{ "sub": "a", "status": "met" }],
+      "expect": { "b1": "CR", "b2": "NE", "b3": "NE", "overall": "CR" }
+    },
+    {
+      "id": "b1.boundary.2000_01.is_en",
+      "eoo_km2": 2000.01,
+      "clauses": [{ "sub": "a", "status": "met" }],
+      "expect": { "b1": "EN", "b2": "NE", "b3": "NE", "overall": "EN" }
+    },
+    {
+      "id": "b1.boundary.20000.is_en",
+      "eoo_km2": 20000.0,
+      "clauses": [{ "sub": "a", "status": "met" }],
+      "expect": { "b1": "EN", "b2": "NE", "b3": "NE", "overall": "EN" }
+    },
+    {
+      "id": "b1.boundary.20001.is_vu",
+      "eoo_km2": 20001.0,
+      "clauses": [{ "sub": "a", "status": "met" }],
+      "expect": { "b1": "VU", "b2": "NE", "b3": "NE", "overall": "VU" }
+    },
+    {
+      "id": "b1.boundary.50000.is_vu",
+      "eoo_km2": 50000.0,
+      "clauses": [{ "sub": "a", "status": "met" }],
+      "expect": { "b1": "VU", "b2": "NE", "b3": "NE", "overall": "VU" }
+    },
+    {
+      "id": "b1.boundary.50001.is_lc",
+      "why": "Above every bound the criterion is not triggered at all.",
+      "eoo_km2": 50001.0,
+      "clauses": [{ "sub": "a", "status": "met" }],
+      "expect": { "b1": "LC", "b2": "NE", "b3": "NE", "overall": "LC" }
+    },
+
+    {
+      "id": "b2.boundary.2.is_cr",
+      "aoo_cells": 2.0,
+      "clauses": [{ "sub": "a", "status": "met" }],
+      "expect": { "b1": "NE", "b2": "CR", "b3": "NE", "overall": "CR" }
+    },
+    {
+      "id": "b2.boundary.3.is_en",
+      "aoo_cells": 3.0,
+      "clauses": [{ "sub": "a", "status": "met" }],
+      "expect": { "b1": "NE", "b2": "EN", "b3": "NE", "overall": "EN" }
+    },
+    {
+      "id": "b2.boundary.20.is_en",
+      "aoo_cells": 20.0,
+      "clauses": [{ "sub": "a", "status": "met" }],
+      "expect": { "b1": "NE", "b2": "EN", "b3": "NE", "overall": "EN" }
+    },
+    {
+      "id": "b2.boundary.21.is_vu",
+      "aoo_cells": 21.0,
+      "clauses": [{ "sub": "a", "status": "met" }],
+      "expect": { "b1": "NE", "b2": "VU", "b3": "NE", "overall": "VU" }
+    },
+    {
+      "id": "b2.boundary.50.is_vu",
+      "aoo_cells": 50.0,
+      "clauses": [{ "sub": "a", "status": "met" }],
+      "expect": { "b1": "NE", "b2": "VU", "b3": "NE", "overall": "VU" }
+    },
+    {
+      "id": "b2.boundary.51.is_lc",
+      "aoo_cells": 51.0,
+      "clauses": [{ "sub": "a", "status": "met" }],
+      "expect": { "b1": "NE", "b2": "LC", "b3": "NE", "overall": "LC" }
+    },
+
+    {
+      "id": "clause_c.regression.three_locations_in_cr_band_is_en",
+      "why": "THE BUG. Clause (c) is category dependent: CR demands exactly 1 threat-defined location, so three locations in the CR EOO band qualifies only at EN. Treating (c) as a boolean gate on a pre-computed CR threshold returns CR and overstates the threat by a full category.",
+      "eoo_km2": 1500.0,
+      "clauses": [
+        { "sub": "a", "status": "not_met" },
+        { "sub": "b", "status": "not_met" }
+      ],
+      "locations": 3,
+      "note": "B3's rapid-collapse limb is left unassessed, so B3 is correctly a range. It cannot affect the overall: B1 is firmly EN, which outranks VU, B3's ceiling.",
+      "expect": { "b1": "EN", "b2": "NE", "b3": "VU (LC-VU)", "overall": "EN" }
+    },
+    {
+      "id": "clause_c.one_location_in_cr_band_is_cr",
+      "eoo_km2": 1500.0,
+      "clauses": [
+        { "sub": "a", "status": "not_met" },
+        { "sub": "b", "status": "not_met" },
+        { "sub": "b3_rapid_collapse", "status": "not_met" }
+      ],
+      "locations": 1,
+      "expect": { "b1": "CR", "b2": "NE", "b3": "LC", "overall": "CR" }
+    },
+    {
+      "id": "clause_c.eight_locations_in_cr_band_is_vu",
+      "why": "Too many for CR (1) and EN (<=5), within VU (<=10).",
+      "eoo_km2": 1500.0,
+      "clauses": [
+        { "sub": "a", "status": "not_met" },
+        { "sub": "b", "status": "not_met" },
+        { "sub": "b3_rapid_collapse", "status": "not_met" }
+      ],
+      "locations": 8,
+      "expect": { "b1": "VU", "b2": "NE", "b3": "LC", "overall": "VU" }
+    },
+    {
+      "id": "clause_c.eleven_locations_fails_entirely",
+      "eoo_km2": 1500.0,
+      "clauses": [
+        { "sub": "a", "status": "not_met" },
+        { "sub": "b", "status": "not_met" },
+        { "sub": "b3_rapid_collapse", "status": "not_met" }
+      ],
+      "locations": 11,
+      "expect": { "b1": "LC", "b2": "NE", "b3": "LC", "overall": "LC" }
+    },
+    {
+      "id": "clause_c.confirmed_level_narrows_the_range",
+      "why": "(c) confirms EN at three locations, but (a) is unassessed and could still lift this to CR, so the range is bounded below by EN rather than LC.",
+      "eoo_km2": 1500.0,
+      "locations": 3,
+      "expect": { "b1": "CR (EN-CR)", "b2": "NE", "b3": "VU (LC-VU)", "overall": "CR (EN-CR)" }
+    },
+
+    {
+      "id": "clause_a.any_aspect_satisfies_the_gate",
+      "why": "Clause (a) is met if ANY of a.i, a.ii or a.iii is declining.",
+      "eoo_km2": 1500.0,
+      "clauses": [{ "sub": "a.iii", "status": "met" }],
+      "no_plausible_threats": true,
+      "expect": { "b1": "CR", "b2": "NE", "b3": "LC", "overall": "CR" }
+    },
+
+    {
+      "id": "threats.none_plausible_means_clause_c_not_met",
+      "why": "Box 13 step 5: where there are no plausible threats, B1(c), B2(c) and B3 are not met. A finding, not ignorance.",
+      "eoo_km2": 1500.0,
+      "clauses": [
+        { "sub": "a", "status": "not_met" },
+        { "sub": "b", "status": "not_met" }
+      ],
+      "no_plausible_threats": true,
+      "expect": { "b1": "LC", "b2": "NE", "b3": "LC", "overall": "LC" }
+    },
+    {
+      "id": "threats.insufficient_information_is_data_deficient",
+      "why": "Box 13 step 5 again: this must be distinguished from no-threats, and yields Data Deficient.",
+      "eoo_km2": 1500.0,
+      "clauses": [
+        { "sub": "a", "status": "not_met" },
+        { "sub": "b", "status": "not_met" }
+      ],
+      "locations_insufficient_information": true,
+      "expect": { "b1": "DD", "b2": "NE", "b3": "DD", "overall": "DD" }
+    },
+
+    {
+      "id": "gate.unassessed.yields_range",
+      "why": "The headline case. Metrics say EN; nobody has checked (a)/(b)/(c); the honest answer spans LC to EN. Section 6.3.2 p.70 requires propagating both scenarios.",
+      "eoo_km2": 15000.0,
+      "aoo_cells": 15.0,
+      "expect": {
+        "b1": "EN (LC-EN)",
+        "b2": "EN (LC-EN)",
+        "b3": "NE",
+        "overall": "EN (LC-EN)"
+      }
+    },
+    {
+      "id": "gate.all_refuted.is_lc",
+      "eoo_km2": 15000.0,
+      "aoo_cells": 15.0,
+      "clauses": [
+        { "sub": "a", "status": "not_met" },
+        { "sub": "b", "status": "not_met" },
+        { "sub": "b3_rapid_collapse", "status": "not_met" }
+      ],
+      "no_plausible_threats": true,
+      "expect": { "b1": "LC", "b2": "LC", "b3": "LC", "overall": "LC" }
+    },
+
+    {
+      "id": "overall.most_threatened_sub_criterion_governs",
+      "why": "EOO is EN, AOO is CR; the overall category follows the worse of the two.",
+      "eoo_km2": 15000.0,
+      "aoo_cells": 1.0,
+      "clauses": [{ "sub": "b", "status": "met" }],
+      "expect": { "b1": "EN", "b2": "CR", "b3": "NE", "overall": "CR" }
+    },
+    {
+      "id": "overall.unevaluated_sub_criterion_does_not_mask_a_finding",
+      "aoo_cells": 15.0,
+      "clauses": [{ "sub": "a", "status": "met" }],
+      "expect": { "b1": "NE", "b2": "EN", "b3": "NE", "overall": "EN" }
+    },
+    {
+      "id": "overall.no_input_at_all_is_not_evaluated",
+      "why": "Nothing supplied means nothing was attempted, including B3.",
+      "expect": { "b1": "NE", "b2": "NE", "b3": "NE", "overall": "NE" }
+    },
+
+    {
+      "id": "uncertainty.metric_bounds_widen_the_category",
+      "eoo_km2": 20000.0,
+      "eoo_lower_km2": 15000.0,
+      "eoo_upper_km2": 25000.0,
+      "clauses": [{ "sub": "a", "status": "met" }],
+      "expect": { "b1": "EN (VU-EN)", "b2": "NE", "b3": "NE", "overall": "EN (VU-EN)" }
+    },
+    {
+      "id": "uncertainty.metric_and_gate_compose",
+      "eoo_km2": 20000.0,
+      "eoo_lower_km2": 15000.0,
+      "eoo_upper_km2": 25000.0,
+      "expect": { "b1": "EN (LC-EN)", "b2": "NE", "b3": "NE", "overall": "EN (LC-EN)" }
+    },
+
+    {
+      "id": "guidelines.box12.great_fish_thicket",
+      "why": "Published worked example, Guidelines Box 12 p.69. Great Fish Thicket, South Africa: EOO 18,359.2 km2 falls in the EN band under B1; 155 grid cells intersect, 145 after the 1% small-patch exclusion, which is above every B2 threshold; no subcriteria are met, so the assessment is Least Concern.",
+      "eoo_km2": 18359.2,
+      "aoo_cells": 145.0,
+      "clauses": [
+        { "sub": "a", "status": "not_met" },
+        { "sub": "b", "status": "not_met" },
+        { "sub": "b3_rapid_collapse", "status": "not_met" }
+      ],
+      "no_plausible_threats": true,
+      "expect": { "b1": "LC", "b2": "LC", "b3": "LC", "overall": "LC" }
+    },
+    {
+      "id": "guidelines.box12.great_fish_thicket.thresholds_alone",
+      "why": "Same ecosystem, showing the threshold outcome before the gate: the Guidelines say the EOO meets 'the initial requirements for an Endangered classification under criterion B1', which is exactly what threshold_category must report while the gated answer stays LC.",
+      "eoo_km2": 18359.2,
+      "aoo_cells": 145.0,
+      "clauses": [
+        { "sub": "a", "status": "not_met" },
+        { "sub": "b", "status": "not_met" }
+      ],
+      "no_plausible_threats": true,
+      "expect_threshold": { "b1": "EN", "b2": "LC" },
+      "expect": { "b1": "LC", "b2": "LC", "b3": "LC", "overall": "LC" }
+    },
+    {
+      "id": "guidelines.box14.cape_flats_sand_fynbos",
+      "why": "Published worked example, Guidelines Box 14 p.75-76. Cape Flats Sand Fynbos, South Africa: two threat-defined locations, and severe immediate threats making it capable of collapse or becoming CR within a very short time period. Vulnerable under B3.",
+      "locations": 2,
+      "clauses": [{ "sub": "b3_rapid_collapse", "status": "met" }],
+      "expect": { "b1": "NE", "b2": "NE", "b3": "VU", "overall": "VU" }
+    },
+    {
+      "id": "guidelines.box14.coolibah_black_box_woodland",
+      "why": "Published worked example, Guidelines Box 14 p.75. Coolibah-Black Box Woodland, south-eastern Australia: five threat-defined locations, but unlikely to collapse or become CR within about 20 years, so B3's second limb fails and the status is Least Concern under this subcriterion. The negative case for B3.",
+      "locations": 5,
+      "clauses": [{ "sub": "b3_rapid_collapse", "status": "not_met" }],
+      "expect": { "b1": "NE", "b2": "NE", "b3": "LC", "overall": "LC" }
+    }
+  ]
+}

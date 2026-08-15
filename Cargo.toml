@@ -1,0 +1,48 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/iucn-rle-core",
+    "crates/iucn-rle-capi",
+    "crates/iucn-rle-cli",
+    "bindings/python",
+    "bindings/wasm",
+]
+# The R binding is deliberately outside the workspace. `R CMD build` expects a
+# self-contained crate under src/rust with its own lockfile, and CRAN requires
+# vendored sources; sharing this workspace's lockfile breaks both.
+exclude = ["bindings/r"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.82"
+license = "Apache-2.0"
+repository = "https://github.com/RLE-Assessment/rle-rust"
+authors = ["RLE-Assessment contributors"]
+
+[workspace.dependencies]
+iucn-rle-core = { path = "crates/iucn-rle-core", version = "0.0.1" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[workspace.lints.rust]
+missing_docs = "warn"
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# The domain is full of f64 metrics compared against integer-valued thresholds.
+cast_precision_loss = "allow"
+module_name_repetitions = "allow"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+# WASM bundle size matters: this ships to browsers.
+[profile.release-wasm]
+inherits = "release"
+opt-level = "z"
+panic = "abort"
+strip = true

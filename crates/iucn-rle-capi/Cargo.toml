@@ -1,0 +1,23 @@
+[package]
+name = "iucn-rle-capi"
+description = "C ABI for IUCN Red List of Ecosystems assessment calculations"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "iucn_rle"
+# cdylib for ccall/dlopen consumers (Julia, C, anything else); staticlib for
+# embedding; rlib so the crate's own tests can exercise the ABI in-process.
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+iucn-rle-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

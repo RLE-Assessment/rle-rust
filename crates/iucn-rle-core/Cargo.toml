@@ -1,0 +1,31 @@
+[package]
+name = "iucn-rle-core"
+description = "IUCN Red List of Ecosystems assessment calculations: pure, synchronous, no I/O"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+categories = ["science", "science::geo"]
+keywords = ["iucn", "ecosystems", "conservation", "redlist"]
+
+# INVARIANT: nothing here may touch the network, the filesystem, or the clock.
+# This crate must compile for wasm32-unknown-unknown unchanged. CI enforces it.
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+# Build-time only: hashes the threshold TOML so `sha2` never reaches the shipped
+# binary. Build dependencies do not affect the wasm32 target.
+[build-dependencies]
+sha2 = "0.10"
+
+[dev-dependencies]
+serde_json = { workspace = true }
+# Parsing the threshold TOML is a test-only concern: the drift test reads it and
+# checks it against the compiled constants. Runtime never parses TOML.
+toml = "0.9"
+
+[lints]
+workspace = true

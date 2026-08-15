@@ -1,0 +1,154 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace
+
+  # The guard rail. iucn-rle-core must stay compilable for the browser; if a
+  # dependency that cannot target wasm32 reaches it, the WASM binding dies and we
+  # want to know on the PR that introduced it, not months later.
+  wasm-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p iucn-rle-core --target wasm32-unknown-unknown
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: astral-sh/setup-uv@v6
+      - run: uv tool install maturin
+      - run: maturin build -m bindings/python/Cargo.toml --out dist
+      - run: uv pip install --system dist/*.whl pytest
+      - run: python -m pytest bindings/python/tests -q
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: jetli/wasm-pack-action@v0.4.0
+      - run: wasm-pack build bindings/wasm --target nodejs --out-dir ../../target/wasm-node --out-name iucn_rle
+      - run: node --test js/conformance.mjs
+
+  # The thresholds page is generated from the data file the engine compiles in, so
+  # documentation cannot drift from the numbers actually applied. This job is what
+  # keeps that true.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: python3 tools/generate_threshold_docs.py --check
+      - run: npm install -g mystmd
+      - run: myst build --html
+        working-directory: docs
+
+  # This job runs the conformance corpus through the R binding, which is what we
+  # actually claim: that R produces the same answers as every other surface.
+  #
+  # It deliberately does NOT run `R CMD check`. That is a *packaging* check, and the
+  # packaging is knowingly unfinished: src/rust/Cargo.toml depends on iucn-rle-core by
+  # path, and `R CMD check` copies the package into check/iucnrle.Rcheck/00_pkg_src/,
+  # where that path no longer resolves. `cargo vendor` does not fix it either — it
+  # vendors registry crates but leaves path dependencies as paths.
+  #
+  # The fix is to publish iucn-rle-core to crates.io and depend on a version, which is
+  # premature while the API is still moving. Until then, running `R CMD check` here
+  # would only assert a failure we have already diagnosed. Restore it as a required
+  # check the moment the crates.io dependency lands — the R package is not
+  # distributable before that.
+  r:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          working-directory: bindings/r/iucnrle
+          extra-packages: |
+            any::jsonlite
+            any::testthat
+            any::pkgload
+            any::devtools
+      - name: Conformance corpus through the R binding
+        working-directory: bindings/r/iucnrle
+        env:
+          # The R runner errors rather than skips if the corpus is missing, so a
+          # path problem fails loudly instead of vacuously passing.
+          IUCN_RLE_REPO_ROOT: ${{ github.workspace }}
+        run: |
+          Rscript -e '
+            pkgload::load_all(quiet = TRUE)
+            testthat::test_dir(
+              "tests/testthat",
+              package = "iucnrle",
+              load_package = "none",
+              stop_on_failure = TRUE
+            )
+          '

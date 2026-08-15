@@ -1,0 +1,7 @@
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+# wasm32-unknown-unknown is not optional: `cargo check -p iucn-rle-core --target
+# wasm32-unknown-unknown` is the guard rail that stops a non-WASM dependency
+# (object_store, geos, proj) from ever reaching the core crate.
+targets = ["wasm32-unknown-unknown"]

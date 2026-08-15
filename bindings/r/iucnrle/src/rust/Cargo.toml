@@ -1,0 +1,27 @@
+[package]
+name = 'iucnrle'
+publish = false
+version = '0.1.0'
+edition = '2021'
+rust-version = '1.65'
+
+[lib]
+crate-type = [ 'rlib', 'staticlib' ]
+name = 'iucnrle'
+
+[[bin]]
+name = 'document'
+path = 'document.rs'
+
+[dependencies]
+extendr-api = '0.9'
+# Path dependency for local development. `R CMD build` tarballs only this package
+# directory, so the path escapes it — before the first r-universe/CRAN release this
+# must become a crates.io version dependency (or be vendored via `cargo vendor`).
+# That is the reason M0 publishes iucn-rle-core to crates.io first.
+iucn-rle-core = { path = '../../../../../crates/iucn-rle-core' }
+serde_json = '1'
+
+[profile.release]
+lto = true
+codegen-units = 1
