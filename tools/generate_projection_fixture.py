@@ -96,29 +96,75 @@ def build() -> dict:
     }
 
 
+def check(tolerance_m: float = 1e-9) -> int:
+    """Verify the committed coordinates still match what PROJ produces.
+
+    Compares the numbers, not the file bytes. A byte comparison would also fail on
+    the `generated_by` line whenever the runner has a different pyproj or PROJ build,
+    which says nothing about whether the projection changed — and a check that cries
+    wolf on a version bump gets disabled the first time it is inconvenient.
+
+    What this catches is the thing worth catching: PROJ actually returning different
+    coordinates for the same input.
+    """
+    if not OUTPUT.exists():
+        print(f"error: {OUTPUT.relative_to(ROOT)} does not exist", file=sys.stderr)
+        return 1
+
+    committed = json.loads(OUTPUT.read_text())
+    current = build()
+
+    committed_points = {(c["lon"], c["lat"]): c for c in committed["cases"]}
+    problems: list[str] = []
+
+    for case in current["cases"]:
+        key = (case["lon"], case["lat"])
+        if key not in committed_points:
+            problems.append(f"{key} is missing from the committed fixture")
+            continue
+        was = committed_points.pop(key)
+        for axis in ("x", "y"):
+            deviation = abs(was[axis] - case[axis])
+            if deviation > tolerance_m:
+                problems.append(
+                    f"{key} {axis}: committed {was[axis]}, PROJ now gives "
+                    f"{case[axis]} (differs by {deviation:.3e} m)"
+                )
+
+    for key in committed_points:
+        problems.append(f"{key} is in the fixture but no longer generated")
+
+    if problems:
+        print(
+            "error: the committed projection fixture no longer matches PROJ:\n  "
+            + "\n  ".join(problems)
+            + "\n\nThis means PROJ changed its answers, which is a real signal — "
+            "investigate before regenerating.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(
+        f"{OUTPUT.relative_to(ROOT)} matches PROJ "
+        f"({len(current['cases'])} points, within {tolerance_m:.0e} m)"
+    )
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--check", action="store_true", help="verify the fixture is up to date"
+        "--check",
+        action="store_true",
+        help="verify the committed coordinates still match PROJ",
     )
     args = parser.parse_args()
 
-    generated = json.dumps(build(), indent=2) + "\n"
-
     if args.check:
-        current = OUTPUT.read_text() if OUTPUT.exists() else ""
-        if current != generated:
-            print(
-                f"error: {OUTPUT.relative_to(ROOT)} is out of date.\n"
-                f"       Run: python3 tools/generate_projection_fixture.py",
-                file=sys.stderr,
-            )
-            return 1
-        print(f"{OUTPUT.relative_to(ROOT)} is up to date")
-        return 0
+        return check()
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text(generated)
+    OUTPUT.write_text(json.dumps(build(), indent=2) + "\n")
     print(f"wrote {OUTPUT.relative_to(ROOT)} ({len(POINTS)} reference points)")
     return 0
 

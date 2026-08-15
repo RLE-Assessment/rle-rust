@@ -63,9 +63,14 @@ def distribution_metrics(
     projected, and silently coping would produce a plausible but wrong AOO.
 
         >>> square = [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]]
-        >>> result = iucn_rle.distribution_metrics([("T1.1.1", square)])
-        >>> round(result["ecosystems"][0]["eoo_km2"])
-        12309
+        >>> metrics = iucn_rle.distribution_metrics([("T1.1.1", square)])
+        >>> round(metrics["ecosystems"][0]["eoo_km2"])
+        12308
+
+    Note ``aoo_cells`` and ``occupied_cell_count`` are different numbers, and only
+    the first is the Criterion B2 metric. For the square above they are 128 and 144:
+    the 1% exclusion drops the sliver cells around the edge. ``rle-python`` calls
+    both of these "AOO", which is a trap worth avoiding.
 
     The result feeds straight into :func:`criterion_b`.
     """
