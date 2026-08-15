@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "function": "project_to_aoo_crs",
+  "source_crs": "EPSG:4326",
+  "target_crs": "ESRI:54034",
+  "generated_by": "pyproj 3.7.2 / PROJ 9.5.1",
+  "description": [
+    "Reference coordinates for the ESRI:54034 World Cylindrical Equal Area",
+    "projection, generated from PROJ.",
+    "",
+    "The AOO grid is defined in this projection, so every occupied-cell count",
+    "depends on it. PROJ is what the rest of the geospatial world agrees with,",
+    "including rle-python via pyproj, so these are the values to match.",
+    "",
+    "Tolerance is 1e-6 m (one micrometre). The forward transform is closed-form",
+    "for a standard parallel of 0, with no iteration and no series truncation,",
+    "so agreement is limited only by floating-point rounding \u2014 measured at under",
+    "2 nanometres when this fixture was written."
+  ],
+  "tolerance_m": 1e-06,
+  "cases": [
+    {
+      "why": "the projection origin",
+      "lon": 0.0,
+      "lat": 0.0,
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "why": "a short way from the origin",
+      "lon": 1.0,
+      "lat": 1.0,
+      "x": 111319.49079327357,
+      "y": 110568.81239991242
+    },
+    {
+      "why": "the opposite quadrant, checking sign handling",
+      "lon": -1.0,
+      "lat": -1.0,
+      "x": -111319.49079327357,
+      "y": -110568.81239991207
+    },
+    {
+      "why": "the eastern antimeridian",
+      "lon": 180.0,
+      "lat": 0.0,
+      "x": 20037508.342789244,
+      "y": 0.0
+    },
+    {
+      "why": "the western antimeridian",
+      "lon": -180.0,
+      "lat": 0.0,
+      "x": -20037508.342789244,
+      "y": 0.0
+    },
+    {
+      "why": "the north pole, where the authalic term saturates",
+      "lon": 0.0,
+      "lat": 90.0,
+      "x": 0.0,
+      "y": 6363885.331926041
+    },
+    {
+      "why": "the south pole",
+      "lon": 0.0,
+      "lat": -90.0,
+      "x": 0.0,
+      "y": -6363885.33192604
+    },
+    {
+      "why": "just short of the north pole",
+      "lon": 0.0,
+      "lat": 89.9,
+      "x": 0.0,
+      "y": 6363875.551999986
+    },
+    {
+      "why": "mid-latitude, both positive",
+      "lon": 45.0,
+      "lat": 45.0,
+      "x": 5009377.085697311,
+      "y": 4489858.886948002
+    },
+    {
+      "why": "mid-latitude, both negative",
+      "lon": -45.0,
+      "lat": -45.0,
+      "x": -5009377.085697311,
+      "y": -4489858.8869480025
+    },
+    {
+      "why": "Bogota, Colombia",
+      "lon": -73.5,
+      "lat": 4.2,
+      "x": -8181982.573305607,
+      "y": 464007.2620082965
+    },
+    {
+      "why": "Medellin, Colombia",
+      "lon": -75.5,
+      "lat": 6.25,
+      "x": -8404621.554892154,
+      "y": 689755.9653571615
+    },
+    {
+      "why": "southern Colombia, across the equator",
+      "lon": -70.0,
+      "lat": -4.2,
+      "x": -7792364.355529149,
+      "y": -464007.2620082991
+    },
+    {
+      "why": "Great Fish Thicket, South Africa (Guidelines Box 12)",
+      "lon": 25.5,
+      "lat": -33.7,
+      "x": 2838647.015228476,
+      "y": -3520021.7634391044
+    },
+    {
+      "why": "Cape Flats Sand Fynbos, South Africa (Guidelines Box 14)",
+      "lon": 18.5,
+      "lat": -34.0,
+      "x": 2059410.579675561,
+      "y": -3547686.071760087
+    },
+    {
+      "why": "Coolibah-Black Box Woodland, Australia (Box 14)",
+      "lon": 145.5,
+      "lat": -30.0,
+      "x": 16196985.910421304,
+      "y": -3171259.3155185394
+    },
+    {
+      "why": "mid-Pacific, far from the central meridian",
+      "lon": -159.0,
+      "lat": 22.0,
+      "x": -17699799.0361305,
+      "y": 2374784.955425689
+    },
+    {
+      "why": "high northern latitude",
+      "lon": 100.0,
+      "lat": 60.0,
+      "x": 11131949.079327356,
+      "y": 5505099.650439626
+    },
+    {
+      "why": "high southern latitude",
+      "lon": -60.0,
+      "lat": -60.0,
+      "x": -6679169.447596414,
+      "y": -5505099.6504396275
+    },
+    {
+      "why": "a fraction of a degree north, near the equator",
+      "lon": 0.0,
+      "lat": 0.5,
+      "x": 0.0,
+      "y": 55286.45497719309
+    }
+  ]
+}

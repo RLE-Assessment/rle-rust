@@ -95,7 +95,7 @@ conformance-python: python
 
 # Run the conformance corpus through the WASM binding under Node.
 conformance-js: wasm-node
-    node --test {{root}}/js/conformance.mjs
+    node --test {{root}}/js/conformance.mjs {{root}}/js/golden.mjs
 
 # Run the conformance corpus through the R binding.
 conformance-r:
@@ -116,6 +116,14 @@ docs-thresholds:
 # Fail if docs/thresholds.md has drifted from the threshold table.
 docs-thresholds-check:
     python3 {{root}}/tools/generate_threshold_docs.py --check
+
+# Regenerate the ESRI:54034 reference fixture from PROJ. Needs pyproj.
+projection-fixture:
+    python3 {{root}}/tools/generate_projection_fixture.py
+
+# Fail if the projection fixture has drifted from PROJ. Needs pyproj.
+projection-fixture-check:
+    python3 {{root}}/tools/generate_projection_fixture.py --check
 
 # Build the documentation site into docs/_build.
 docs: docs-thresholds

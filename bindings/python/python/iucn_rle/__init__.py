@@ -13,19 +13,77 @@ namespace.
 from __future__ import annotations
 
 import json
-from typing import Any, Literal, Sequence
+from typing import Any, Literal, Mapping, Sequence
 
-from ._iucn_rle import criterion_b_json, thresholds_sha256, thresholds_toml, version
+from ._iucn_rle import (
+    criterion_b_json,
+    distribution_metrics_json,
+    thresholds_sha256,
+    thresholds_toml,
+    version,
+)
 
 __all__ = [
     "__version__",
     "criterion_b",
+    "distribution_metrics",
     "thresholds_sha256",
     "thresholds_toml",
     "version",
 ]
 
 __version__ = version()
+
+Rings = Sequence[Sequence[Sequence[float]]]
+
+
+def distribution_metrics(
+    polygons: Sequence[tuple[str, Rings]] | Mapping[str, Sequence[Rings]],
+) -> dict[str, Any]:
+    """Compute Criterion B spatial metrics from a distribution map.
+
+    Args:
+        polygons: Either a sequence of ``(ecosystem, rings)`` pairs, or a mapping of
+            ecosystem to a list of that ecosystem's polygons. ``rings`` is the
+            exterior ring followed by any holes, each a sequence of ``[lon, lat]``
+            pairs in **degrees on WGS84**.
+
+    Returns:
+        A dict with one entry per ecosystem giving ``eoo_km2`` and ``aoo_cells``,
+        plus the grid CRS and cell size for provenance.
+
+    A ring's role is decided by its **position**, not its winding: ``rings[0]`` is
+    the exterior and the rest are holes, whichever way each one winds. Source formats
+    disagree — GeoJSON specifies counter-clockwise exteriors, shapefiles the
+    opposite, and real files often follow neither — so the format cannot change an
+    assessment.
+
+    Coordinates outside valid longitude/latitude range raise rather than being
+    clamped, because they almost always mean the values are swapped or already
+    projected, and silently coping would produce a plausible but wrong AOO.
+
+        >>> square = [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]]
+        >>> metrics = iucn_rle.distribution_metrics([("T1.1.1", square)])
+        >>> round(metrics["ecosystems"][0]["eoo_km2"])
+        12308
+
+    Note ``aoo_cells`` and ``occupied_cell_count`` are different numbers, and only
+    the first is the Criterion B2 metric. For the square above they are 128 and 144:
+    the 1% exclusion drops the sliver cells around the edge. ``rle-python`` calls
+    both of these "AOO", which is a trap worth avoiding.
+
+    The result feeds straight into :func:`criterion_b`.
+    """
+    if isinstance(polygons, Mapping):
+        pairs = [
+            (ecosystem, rings)
+            for ecosystem, features in polygons.items()
+            for rings in features
+        ]
+    else:
+        pairs = list(polygons)
+
+    return json.loads(distribution_metrics_json(pairs))
 
 Status = Literal["met", "not_met", "not_assessed"]
 

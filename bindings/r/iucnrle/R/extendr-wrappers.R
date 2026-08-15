@@ -25,4 +25,12 @@ rle_thresholds_sha256 <- function() .Call(wrap__rle_thresholds_sha256)
 #' @export
 rle_criterion_b_json <- function(eoo_km2, aoo_cells, clause_names, clause_statuses, locations, no_plausible_threats, locations_insufficient_information, eoo_lower_km2, eoo_upper_km2, aoo_lower_cells, aoo_upper_cells) .Call(wrap__rle_criterion_b_json, eoo_km2, aoo_cells, clause_names, clause_statuses, locations, no_plausible_threats, locations_insufficient_information, eoo_lower_km2, eoo_upper_km2, aoo_lower_cells, aoo_upper_cells)
 
+#' Compute Criterion B spatial metrics from a distribution map, returning JSON.
+#'
+#' Polygons arrive as a JSON array rather than as nested R lists. Walking a deeply
+#' nested SEXP structure across the FFI boundary would be far more code for no gain,
+#' and jsonlite is already a dependency of the R wrapper.
+#' @export
+rle_distribution_metrics_json <- function(polygons_json) .Call(wrap__rle_distribution_metrics_json, polygons_json)
+
 # nolint end

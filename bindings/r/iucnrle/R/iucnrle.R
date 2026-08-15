@@ -75,6 +75,50 @@ criterion_b <- function(eoo_km2 = NULL,
   jsonlite::fromJSON(json, simplifyDataFrame = FALSE)
 }
 
+#' Compute Criterion B spatial metrics from a distribution map
+#'
+#' Takes polygons in longitude/latitude degrees on WGS84 and returns the extent of
+#' occurrence and area of occupancy for each ecosystem. Coordinates are projected to
+#' ESRI:54034 internally, because both metrics require an equal-area CRS.
+#'
+#' A ring's role comes from its **position**, not its winding: the first ring is the
+#' exterior and the rest are holes, whichever way each one winds. Source formats
+#' disagree — GeoJSON specifies counter-clockwise exteriors, shapefiles the opposite,
+#' and real files often follow neither — so the format cannot change an assessment.
+#'
+#' Coordinates outside valid longitude/latitude range raise an error rather than
+#' being clamped: they almost always mean the values are swapped or already
+#' projected, and silently coping would produce a plausible but wrong AOO.
+#'
+#' @param polygons A list of polygons, each a list with `ecosystem` (a string) and
+#'   `rings` (a list of rings, each a list or matrix of `c(lon, lat)` pairs). The
+#'   first ring is the exterior; any others are holes.
+#'
+#' @return A list with one entry per ecosystem giving `eoo_km2` and `aoo_cells`,
+#'   plus the grid CRS and cell size for provenance.
+#'
+#' @examples
+#' square <- list(list(c(0, 0), c(1, 0), c(1, 1), c(0, 1)))
+#' result <- distribution_metrics(list(
+#'   list(ecosystem = "T1.1.1", rings = square)
+#' ))
+#' result$ecosystems[[1]]$eoo_km2
+#'
+#' @export
+distribution_metrics <- function(polygons) {
+  if (!is.list(polygons)) {
+    stop("`polygons` must be a list", call. = FALSE)
+  }
+
+  # auto_unbox keeps single strings as JSON scalars rather than one-element arrays,
+  # which is what the Rust side expects for `ecosystem`.
+  json <- jsonlite::toJSON(polygons, auto_unbox = TRUE, digits = NA)
+  jsonlite::fromJSON(
+    rle_distribution_metrics_json(json),
+    simplifyDataFrame = FALSE
+  )
+}
+
 #' The IUCN threshold table as TOML
 #'
 #' Returns the auditable source of every numeric breakpoint the engine applies,

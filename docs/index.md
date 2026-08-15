@@ -48,18 +48,28 @@ overstate what the evidence supports. See [the sub-condition gate](./concepts.md
 
 ## Status
 
-Criterion B (restricted geographic distribution) is implemented and verified against the
-2024 Guidelines. You supply the extent of occurrence, area of occupancy and sub-condition
-evidence; the library applies the thresholds and the gate.
+**Criterion B works end to end.** Hand it a distribution map and it computes the extent of
+occurrence and area of occupancy, applies the IUCN thresholds, and applies the sub-condition
+gate. Or supply EOO and AOO from elsewhere and it does the classification alone.
 
-Computing EOO and AOO from distribution maps, and the remaining criteria, are in progress.
-Criterion E will not be automated — it is a bespoke simulation per ecosystem, and the
-library accepts a collapse probability you have computed elsewhere.
+Criteria A, C and D are in progress. Criterion E will not be automated — it is a bespoke
+simulation per ecosystem, and the library accepts a collapse probability you computed
+elsewhere.
+
+Reading distribution maps directly from remote URLs, without downloading them first, is the
+next milestone.
 
 :::{note} On trusting this library
 Every threshold is transcribed from the published Guidelines into a
 [data file you can read](./thresholds.md), and a test asserts that the compiled code matches
-that file. Three of the test cases are the Guidelines' own worked examples, so the engine is
-checked against IUCN's arithmetic and not only against itself. Six language bindings run one
-shared corpus of cases and must produce identical output.
+that file. Three test cases are the Guidelines' own worked examples, so the engine is checked
+against IUCN's arithmetic and not only against itself.
+
+The spatial calculations are checked against `rle-python`, the implementation assessments
+currently use. On its own committed test dataset, the occupied-cell sets and cell counts
+match **exactly**, and the per-cell extents agree to **1.2 × 10⁻¹³**. The extent of occurrence
+reproduces the value published in the RLE workshop material to the precision it was published
+at. The projection matches PROJ to under **2 nanometres**.
+
+Six language bindings run one shared corpus and must produce identical output.
 :::

@@ -85,7 +85,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: jetli/wasm-pack-action@v0.4.0
       - run: wasm-pack build bindings/wasm --target nodejs --out-dir ../../target/wasm-node --out-name iucn_rle
-      - run: node --test js/conformance.mjs
+      - run: node --test js/conformance.mjs js/golden.mjs
 
   # The thresholds page is generated from the data file the engine compiles in, so
   # documentation cannot drift from the numbers actually applied. This job is what
@@ -101,6 +101,11 @@ jobs:
         with:
           node-version: "22"
       - run: python3 tools/generate_threshold_docs.py --check
+      # The ESRI:54034 fixture is generated from PROJ and is what pins the
+      # projection to the reference implementation the rest of the geospatial world
+      # agrees with. Regenerating here catches a PROJ change, not just a local edit.
+      - run: pip install pyproj
+      - run: python3 tools/generate_projection_fixture.py --check
       - run: npm install -g mystmd
       - run: myst build --html
         working-directory: docs

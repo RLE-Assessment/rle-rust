@@ -17,7 +17,8 @@
 //! keeps one flattening (`iucn_rle_core::Summary`) shared by all five bindings.
 
 use iucn_rle_core::ffi::{
-    criterion_b_from_parts, MetricInput, SubconditionInput, SubconditionsInput,
+    criterion_b_from_parts, distribution_metrics, MetricInput, PolygonInput, SubconditionInput,
+    SubconditionsInput,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -102,12 +103,37 @@ fn criterion_b_json(
         .map_err(|e| PyValueError::new_err(format!("could not serialise summary: {e}")))
 }
 
+/// Compute Criterion B spatial metrics from a distribution map, returning JSON.
+///
+/// `polygons` is a list of `(ecosystem, rings)` pairs, where `rings` is the exterior
+/// ring followed by any holes, each a list of `[lon, lat]` pairs in degrees.
+#[pyfunction]
+fn distribution_metrics_json(
+    py: Python<'_>,
+    polygons: Vec<(String, Vec<Vec<[f64; 2]>>)>,
+) -> PyResult<String> {
+    let inputs: Vec<PolygonInput> = polygons
+        .into_iter()
+        .map(|(ecosystem, rings)| PolygonInput { ecosystem, rings })
+        .collect();
+
+    // Release the GIL for the whole computation. This is the path that will run for
+    // minutes on a national map, so `await asyncio.to_thread(...)` has to work.
+    let summary = py
+        .detach(|| distribution_metrics(&inputs))
+        .map_err(PyValueError::new_err)?;
+
+    serde_json::to_string(&summary)
+        .map_err(|e| PyValueError::new_err(format!("could not serialise metrics: {e}")))
+}
+
 #[pymodule]
 fn _iucn_rle(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
     m.add_function(wrap_pyfunction!(thresholds_toml, m)?)?;
     m.add_function(wrap_pyfunction!(thresholds_sha256, m)?)?;
     m.add_function(wrap_pyfunction!(criterion_b_json, m)?)?;
+    m.add_function(wrap_pyfunction!(distribution_metrics_json, m)?)?;
     m.add("__version__", iucn_rle_core::version())?;
     Ok(())
 }

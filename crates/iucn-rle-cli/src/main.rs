@@ -10,7 +10,8 @@
 
 use clap::{Parser, Subcommand, ValueEnum};
 use iucn_rle_core::ffi::{
-    criterion_b_from_parts, MetricInput, SubconditionInput, SubconditionsInput,
+    criterion_b_from_parts, distribution_metrics, MetricInput, PolygonInput, SubconditionInput,
+    SubconditionsInput,
 };
 use iucn_rle_core::Summary;
 
@@ -43,6 +44,24 @@ enum Command {
         /// Print only the SHA-256 digest of the table.
         #[arg(long)]
         sha256: bool,
+    },
+
+    /// Compute EOO and AOO from a GeoJSON distribution map.
+    ///
+    /// Reads a FeatureCollection of Polygons in longitude/latitude degrees and
+    /// reports the Criterion B spatial metrics per ecosystem.
+    Metrics {
+        /// Path to a GeoJSON file, or - to read standard input.
+        #[arg(value_name = "GEOJSON")]
+        path: String,
+
+        /// Feature property holding the ecosystem code.
+        #[arg(long, default_value = "ECO_CODE")]
+        ecosystem_property: String,
+
+        /// Output format.
+        #[arg(long, value_enum, default_value_t = Format::Text)]
+        format: Format,
     },
 
     /// Assess Criterion B (restricted geographic distribution).
@@ -146,9 +165,121 @@ fn print_text(summary: &Summary) {
     );
 }
 
+/// Read a GeoJSON FeatureCollection into polygons.
+///
+/// Deliberately minimal: only what a distribution map needs. Polygon and MultiPolygon
+/// features, one ecosystem code per feature.
+fn read_geojson(path: &str, ecosystem_property: &str) -> Result<Vec<PolygonInput>, String> {
+    let text = if path == "-" {
+        std::io::read_to_string(std::io::stdin()).map_err(|e| format!("reading stdin: {e}"))?
+    } else {
+        std::fs::read_to_string(path).map_err(|e| format!("reading {path}: {e}"))?
+    };
+
+    let value: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("{path} is not valid JSON: {e}"))?;
+
+    let features = value
+        .get("features")
+        .and_then(|f| f.as_array())
+        .ok_or_else(|| format!("{path} is not a GeoJSON FeatureCollection"))?;
+
+    let mut polygons = Vec::new();
+
+    for (index, feature) in features.iter().enumerate() {
+        let ecosystem = feature
+            .get("properties")
+            .and_then(|p| p.get(ecosystem_property))
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                format!(
+                    "feature {index} has no string property {ecosystem_property:?}; \
+                     use --ecosystem-property to name the right one"
+                )
+            })?
+            .to_owned();
+
+        let geometry = feature
+            .get("geometry")
+            .ok_or_else(|| format!("feature {index} has no geometry"))?;
+        let kind = geometry.get("type").and_then(|t| t.as_str()).unwrap_or("");
+
+        // A MultiPolygon is a list of polygons; a Polygon is a list of rings. Treating
+        // each part of a MultiPolygon as its own feature is correct for both metrics.
+        let parts: Vec<&serde_json::Value> = match kind {
+            "Polygon" => vec![geometry
+                .get("coordinates")
+                .unwrap_or(&serde_json::Value::Null)],
+            "MultiPolygon" => geometry
+                .get("coordinates")
+                .and_then(|c| c.as_array())
+                .map(|a| a.iter().collect())
+                .unwrap_or_default(),
+            other => {
+                return Err(format!(
+                    "feature {index} has geometry type {other:?}; only Polygon and \
+                     MultiPolygon describe a distribution"
+                ))
+            }
+        };
+
+        for part in parts {
+            let rings: Vec<Vec<[f64; 2]>> = serde_json::from_value(part.clone())
+                .map_err(|e| format!("feature {index} has malformed coordinates: {e}"))?;
+            polygons.push(PolygonInput {
+                ecosystem: ecosystem.clone(),
+                rings,
+            });
+        }
+    }
+
+    Ok(polygons)
+}
+
 fn run() -> Result<(), String> {
     match Cli::parse().command {
         Command::Version => println!("{}", iucn_rle_core::version()),
+
+        Command::Metrics {
+            path,
+            ecosystem_property,
+            format,
+        } => {
+            let polygons = read_geojson(&path, &ecosystem_property)?;
+            let summary = distribution_metrics(&polygons)?;
+
+            match format {
+                Format::Json => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&summary)
+                        .map_err(|e| format!("could not serialise metrics: {e}"))?
+                ),
+                Format::Text => {
+                    println!(
+                        "{:<12} {:>14} {:>10} {:>10}",
+                        "ECOSYSTEM", "EOO (km2)", "AOO", "OCCUPIED"
+                    );
+                    for e in &summary.ecosystems {
+                        println!(
+                            "{:<12} {:>14.1} {:>10} {:>10}",
+                            e.ecosystem, e.eoo_km2, e.aoo_cells, e.occupied_cell_count
+                        );
+                    }
+                    println!();
+                    println!(
+                        "  grid {} at {:.0} m",
+                        summary.grid_crs, summary.cell_size_m
+                    );
+                    if summary.overfull_cells > 0 {
+                        println!(
+                            "  warning: {} cell(s) received more extent than they can \
+                             hold, so the source map has overlapping features",
+                            summary.overfull_cells
+                        );
+                    }
+                }
+            }
+        }
 
         Command::Thresholds { sha256 } => {
             if sha256 {

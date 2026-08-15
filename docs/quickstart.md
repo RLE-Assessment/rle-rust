@@ -354,6 +354,127 @@ The first contributes to a finding of LC. The second yields **DD** — Data Defi
 the first where you mean the second turns "we did not look" into "it is fine", which is the
 error this distinction exists to prevent.
 
+## From a distribution map
+
+Everything above assumed you already had EOO and AOO. You can also hand the library a
+distribution map and let it compute them.
+
+Coordinates are longitude/latitude degrees on WGS84. They are projected to the
+equal-area grid internally, because a count of grid cells only means something if
+every cell covers the same ground.
+
+::::{tab-set}
+
+:::{tab-item} Python
+:sync: python
+
+```python
+square = [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]]
+
+metrics = iucn_rle.distribution_metrics([("T1.1.1", square)])["ecosystems"][0]
+metrics["eoo_km2"]               # 12308.46
+metrics["aoo_cells"]             # 128  <- the Criterion B2 number
+metrics["occupied_cell_count"]   # 144  <- cells touched, before the 1% exclusion
+```
+:::
+
+:::{tab-item} R
+:sync: r
+
+```r
+square <- list(list(c(0, 0), c(1, 0), c(1, 1), c(0, 1)))
+
+metrics <- distribution_metrics(list(
+  list(ecosystem = "T1.1.1", rings = square)
+))
+metrics$ecosystems[[1]]$eoo_km2
+metrics$ecosystems[[1]]$aoo_cells
+```
+:::
+
+:::{tab-item} Julia
+:sync: julia
+
+```julia
+json = distribution_metrics("""
+  [{"ecosystem": "T1.1.1",
+    "rings": [[[0,0], [1,0], [1,1], [0,1]]]}]
+""")
+JSON3.read(json)["ecosystems"][1]["eoo_km2"]
+```
+:::
+
+:::{tab-item} JavaScript
+:sync: js
+
+```js
+const square = [[[0, 0], [1, 0], [1, 1], [0, 1]]];
+
+const [metrics] = distributionMetrics([
+  { ecosystem: 'T1.1.1', rings: square },
+]).ecosystems;
+
+metrics.eoo_km2;               // 12308.46
+metrics.aoo_cells;             // 128  <- the Criterion B2 number
+metrics.occupied_cell_count;   // 144  <- cells touched, before the 1% exclusion
+```
+:::
+
+:::{tab-item} Rust
+:sync: rust
+
+```rust
+use iucn_rle_core::distribution::DistributionAccumulator;
+
+let mut acc = DistributionAccumulator::new();
+acc.add_polygon("T1.1.1", &[vec![
+    [0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0],
+]]);
+
+let distribution = acc.finish();
+distribution.eoo_km2("T1.1.1");
+distribution.aoo("T1.1.1").aoo_cells;
+```
+:::
+
+:::{tab-item} Command line
+:sync: cli
+
+```bash
+iucn-rle metrics distribution.geojson
+```
+
+```text
+ECOSYSTEM         EOO (km2)        AOO   OCCUPIED
+T1.1.1                 73.2          4          4
+
+  grid ESRI:54034 at 10000 m
+```
+
+Reads a GeoJSON `FeatureCollection`; use `--ecosystem-property` to name the field
+holding the ecosystem code, and `--format json` for machine-readable output.
+:::
+
+::::
+
+Feed the result straight into `criterion_b` and you have an assessment from a map.
+
+### Three things worth knowing
+
+**Ring order decides what is a hole, not winding.** The first ring is the exterior and
+the rest are holes, whichever direction each one winds. Source formats disagree —
+GeoJSON specifies counter-clockwise exteriors, shapefiles the opposite, and real files
+often follow neither — so the format cannot change your answer.
+
+**Bad coordinates are rejected, not repaired.** A latitude of 200 raises an error
+naming the ecosystem and the value. It almost always means the coordinates are swapped
+or already projected, and quietly clamping would produce a plausible-looking but wrong
+AOO.
+
+**Overlapping features are reported.** If two polygons of the same ecosystem overlap,
+the affected cells are capped at full occupancy and `overfull_cells` tells you how many.
+That is a problem with the source map, and the library says so rather than absorbing it.
+
 ## Reading the result
 
 Every surface returns the same structure:

@@ -10,7 +10,8 @@
 //! transformation type: 28".
 
 use iucn_rle_core::ffi::{
-    criterion_b_from_parts, MetricInput, SubconditionInput, SubconditionsInput,
+    criterion_b_from_parts, distribution_metrics, MetricInput, PolygonInput, SubconditionInput,
+    SubconditionsInput,
 };
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
@@ -98,6 +99,33 @@ pub fn criterion_b(args: JsValue) -> Result<JsValue, JsError> {
         subs,
     )
     .map_err(|e| JsError::new(&e))?;
+
+    serde_wasm_bindgen::to_value(&summary).map_err(|e| JsError::new(&e.to_string()))
+}
+
+/// Compute Criterion B spatial metrics from a distribution map.
+///
+/// ```js
+/// const square = [[[0, 0], [1, 0], [1, 1], [0, 1]]];
+/// const result = distributionMetrics([{ ecosystem: 'T1.1.1', rings: square }]);
+/// result.ecosystems[0].eoo_km2;   // about 12309
+/// result.ecosystems[0].aoo_cells;
+/// ```
+///
+/// A ring's role comes from its position, not its winding: `rings[0]` is the
+/// exterior and the rest are holes, whichever way each one winds.
+///
+/// # Errors
+///
+/// Throws if a feature has no exterior ring, or a coordinate is not a valid
+/// longitude/latitude. Out-of-range coordinates are rejected rather than clamped:
+/// they almost always mean the values are swapped or already projected.
+#[wasm_bindgen(js_name = distributionMetrics)]
+pub fn distribution_metrics_js(polygons: JsValue) -> Result<JsValue, JsError> {
+    let polygons: Vec<PolygonInput> =
+        serde_wasm_bindgen::from_value(polygons).map_err(|e| JsError::new(&e.to_string()))?;
+
+    let summary = distribution_metrics(&polygons).map_err(|e| JsError::new(&e))?;
 
     serde_wasm_bindgen::to_value(&summary).map_err(|e| JsError::new(&e.to_string()))
 }

@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""Generate the ESRI:54034 projection reference fixture from PROJ.
+
+The AOO grid is defined in ESRI:54034 (World Cylindrical Equal Area), so every
+occupied-cell count depends on getting this projection right. PROJ is the reference
+implementation the rest of the geospatial world agrees with, including `rle-python`
+via pyproj, so PROJ's answers are the ones to match.
+
+Committing the generated values means the Rust tests need no PROJ at runtime, and the
+same fixture can be run through every language binding.
+
+Usage:
+    python3 tools/generate_projection_fixture.py            # write the fixture
+    python3 tools/generate_projection_fixture.py --check    # fail if out of date
+
+Requires pyproj.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import pyproj
+
+ROOT = Path(__file__).resolve().parent.parent
+OUTPUT = ROOT / "fixtures" / "cases" / "projection.json"
+
+# Chosen to exercise the places a projection implementation goes wrong: the origin,
+# both antimeridians, both poles, both hemispheres in each axis, and the real
+# assessment areas this library was built for.
+POINTS: list[tuple[float, float, str]] = [
+    (0.0, 0.0, "the projection origin"),
+    (1.0, 1.0, "a short way from the origin"),
+    (-1.0, -1.0, "the opposite quadrant, checking sign handling"),
+    (180.0, 0.0, "the eastern antimeridian"),
+    (-180.0, 0.0, "the western antimeridian"),
+    (0.0, 90.0, "the north pole, where the authalic term saturates"),
+    (0.0, -90.0, "the south pole"),
+    (0.0, 89.9, "just short of the north pole"),
+    (45.0, 45.0, "mid-latitude, both positive"),
+    (-45.0, -45.0, "mid-latitude, both negative"),
+    (-73.5, 4.2, "Bogota, Colombia"),
+    (-75.5, 6.25, "Medellin, Colombia"),
+    (-70.0, -4.2, "southern Colombia, across the equator"),
+    (25.5, -33.7, "Great Fish Thicket, South Africa (Guidelines Box 12)"),
+    (18.5, -34.0, "Cape Flats Sand Fynbos, South Africa (Guidelines Box 14)"),
+    (145.5, -30.0, "Coolibah-Black Box Woodland, Australia (Box 14)"),
+    (-159.0, 22.0, "mid-Pacific, far from the central meridian"),
+    (100.0, 60.0, "high northern latitude"),
+    (-60.0, -60.0, "high southern latitude"),
+    (0.0, 0.5, "a fraction of a degree north, near the equator"),
+]
+
+
+def build() -> dict:
+    transformer = pyproj.Transformer.from_crs("EPSG:4326", "ESRI:54034", always_xy=True)
+
+    cases = []
+    for lon, lat, why in POINTS:
+        x, y = transformer.transform(lon, lat)
+        cases.append(
+            {
+                "why": why,
+                "lon": lon,
+                "lat": lat,
+                # repr() keeps full float64 precision through JSON.
+                "x": float(repr(x)),
+                "y": float(repr(y)),
+            }
+        )
+
+    return {
+        "schema_version": 1,
+        "function": "project_to_aoo_crs",
+        "source_crs": "EPSG:4326",
+        "target_crs": "ESRI:54034",
+        "generated_by": f"pyproj {pyproj.__version__} / PROJ {pyproj.proj_version_str}",
+        "description": [
+            "Reference coordinates for the ESRI:54034 World Cylindrical Equal Area",
+            "projection, generated from PROJ.",
+            "",
+            "The AOO grid is defined in this projection, so every occupied-cell count",
+            "depends on it. PROJ is what the rest of the geospatial world agrees with,",
+            "including rle-python via pyproj, so these are the values to match.",
+            "",
+            "Tolerance is 1e-6 m (one micrometre). The forward transform is closed-form",
+            "for a standard parallel of 0, with no iteration and no series truncation,",
+            "so agreement is limited only by floating-point rounding — measured at under",
+            "2 nanometres when this fixture was written.",
+        ],
+        "tolerance_m": 1e-6,
+        "cases": cases,
+    }
+
+
+def check(tolerance_m: float = 1e-6) -> int:
+    """Verify the committed coordinates still match what PROJ produces.
+
+    Compares the numbers, not the file bytes. A byte comparison would also fail on
+    the `generated_by` line whenever the runner has a different pyproj or PROJ build,
+    which says nothing about whether the projection changed — and a check that cries
+    wolf on a version bump gets disabled the first time it is inconvenient.
+
+    What this catches is the thing worth catching: PROJ actually returning different
+    coordinates for the same input.
+
+    On the tolerance. MEASURED cross-platform variation is 1.863e-9 m, at the north
+    pole, between PROJ on macOS and on a Linux CI runner — libm rounding where the
+    authalic term saturates, not a difference in method. One micrometre is roughly a
+    thousand times that, and still absurdly tight for a projection: any genuine
+    change in PROJ's answers would be orders of magnitude larger.
+
+    A tolerance below the platform noise floor produces a check that fails for
+    reasons no one can act on, which is worse than no check at all.
+    """
+    if not OUTPUT.exists():
+        print(f"error: {OUTPUT.relative_to(ROOT)} does not exist", file=sys.stderr)
+        return 1
+
+    committed = json.loads(OUTPUT.read_text())
+    current = build()
+
+    committed_points = {(c["lon"], c["lat"]): c for c in committed["cases"]}
+    problems: list[str] = []
+
+    for case in current["cases"]:
+        key = (case["lon"], case["lat"])
+        if key not in committed_points:
+            problems.append(f"{key} is missing from the committed fixture")
+            continue
+        was = committed_points.pop(key)
+        for axis in ("x", "y"):
+            deviation = abs(was[axis] - case[axis])
+            if deviation > tolerance_m:
+                problems.append(
+                    f"{key} {axis}: committed {was[axis]}, PROJ now gives "
+                    f"{case[axis]} (differs by {deviation:.3e} m)"
+                )
+
+    for key in committed_points:
+        problems.append(f"{key} is in the fixture but no longer generated")
+
+    if problems:
+        print(
+            "error: the committed projection fixture no longer matches PROJ:\n  "
+            + "\n  ".join(problems)
+            + "\n\nThis means PROJ changed its answers, which is a real signal — "
+            "investigate before regenerating.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(
+        f"{OUTPUT.relative_to(ROOT)} matches PROJ "
+        f"({len(current['cases'])} points, within {tolerance_m:.0e} m)"
+    )
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="verify the committed coordinates still match PROJ",
+    )
+    args = parser.parse_args()
+
+    if args.check:
+        return check()
+
+    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT.write_text(json.dumps(build(), indent=2) + "\n")
+    print(f"wrote {OUTPUT.relative_to(ROOT)} ({len(POINTS)} reference points)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
