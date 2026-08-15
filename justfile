@@ -125,6 +125,19 @@ projection-fixture:
 projection-fixture-check:
     python3 {{root}}/tools/generate_projection_fixture.py --check
 
+# Regenerate the GeoParquet reading fixtures. Needs geopandas and pyarrow.
+geoparquet-fixture:
+    python3 {{root}}/tools/generate_geoparquet_fixture.py
+
+# Fail if the GeoParquet fixtures no longer match what geopandas writes.
+#
+# Not part of `just all`: unlike the projection fixture, this one is checked against a
+# library whose output is expected to change between releases, and a drift here means
+# "geopandas changed" rather than "this repo is wrong". Run it deliberately when
+# upgrading geopandas.
+geoparquet-fixture-check:
+    python3 {{root}}/tools/generate_geoparquet_fixture.py --check
+
 # Build the documentation site into docs/_build.
 docs: docs-thresholds
     cd {{root}}/docs && npx -y mystmd@latest build --html

@@ -1,0 +1,77 @@
+{
+  "description": "A GeoParquet 1.1 file written by geopandas, used to check remote reading: footer parsing, `geo` metadata, row-group pruning by bounding box and by ecosystem code, and WKB decoding of polygons and multipolygons.",
+  "generated_by": "geopandas 1.1.4",
+  "path": "fixtures/data/ecosystems.parquet",
+  "file_size": 19395,
+  "geo_version": "1.0.0",
+  "primary_column": "geometry",
+  "encoding": "WKB",
+  "crs_id": {
+    "authority": "EPSG",
+    "code": 4326
+  },
+  "covering_bbox_column": "bbox",
+  "num_rows": 16,
+  "num_row_groups": 4,
+  "row_groups": [
+    {
+      "index": 0,
+      "num_rows": 4,
+      "eco_codes": [
+        "ECO_A"
+      ],
+      "bounds": [
+        -80.0,
+        0.0,
+        -70.5,
+        4.0
+      ]
+    },
+    {
+      "index": 1,
+      "num_rows": 4,
+      "eco_codes": [
+        "ECO_B"
+      ],
+      "bounds": [
+        -60.0,
+        0.0,
+        -50.5,
+        4.0
+      ]
+    },
+    {
+      "index": 2,
+      "num_rows": 4,
+      "eco_codes": [
+        "ECO_C"
+      ],
+      "bounds": [
+        0.0,
+        0.0,
+        9.5,
+        4.0
+      ]
+    },
+    {
+      "index": 3,
+      "num_rows": 4,
+      "eco_codes": [
+        "ECO_D"
+      ],
+      "bounds": [
+        40.0,
+        0.0,
+        49.5,
+        4.0
+      ]
+    }
+  ],
+  "total_bounds": [
+    -80.0,
+    0.0,
+    49.5,
+    4.0
+  ],
+  "path_without_covering": "fixtures/data/ecosystems_no_covering.parquet"
+}

@@ -1,6 +1,15 @@
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+    # RUSTSEC-2024-0436: `paste` is unmaintained. Reached only through parquet, and
+    # unmaintained is not the same as vulnerable — no advisory describes a defect. It is
+    # a proc-macro that concatenates identifiers at compile time, so it contributes no
+    # runtime code, parses no untrusted input, and touches no I/O. Nothing it produces
+    # ships in the binary beyond the tokens it expanded to.
+    # Revisit when parquet drops it; there is no safe upgrade to move to today.
+    "RUSTSEC-2024-0436",
+]
 
 [licenses]
 version = 2
@@ -21,6 +30,13 @@ allow = [
     # share-alike, and no attribution-by-name requirement — the only obligation is
     # to carry the licence text with the data, exactly as MIT requires.
     "CDLA-Permissive-2.0",
+    # Covers tiny-keccak, reached through ahash from the parquet/arrow stack. CC0-1.0 is
+    # a public-domain dedication rather than a licence: it imposes no obligations at all,
+    # so it is strictly more permissive than the MIT entry above. Worth recording that it
+    # explicitly declines to grant patent rights (section 4a) — which some corporate
+    # policies dislike — but MIT and ISC, already allowed here, grant none either, so
+    # this adds no obligation the project was not already accepting.
+    "CC0-1.0",
 ]
 confidence-threshold = 0.9
 

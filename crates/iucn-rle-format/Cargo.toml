@@ -1,0 +1,32 @@
+[package]
+name = "iucn-rle-format"
+description = "Synchronous decoders for IUCN Red List of Ecosystems data formats"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+# Everything here is SYNCHRONOUS and operates on in-memory bytes. That is the whole
+# point: async lives only in iucn-rle-io, so the decoders carry no Send bounds and
+# compile for wasm32 unchanged. Bytes arrive already fetched.
+[dependencies]
+iucn-rle-core = { workspace = true }
+bytes = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+# default-features = false drops the async reader, which brings tokio and would not
+# build for wasm32. "arrow" is what turns column chunks into typed arrays. Verified to
+# compile for wasm32-unknown-unknown at exactly this feature set.
+parquet = { version = "56.2.1", default-features = false, features = ["arrow"] }
+arrow-array = "56.2"
+arrow-schema = "56.2"
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true
