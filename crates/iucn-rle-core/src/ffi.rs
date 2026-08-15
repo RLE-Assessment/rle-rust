@@ -11,6 +11,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::distribution::DistributionAccumulator;
+use crate::grid::{AOO_CELL_SIZE_M, AOO_CRS};
 use crate::{
     criterion_b, Basis, ConditionStatus, DeclineAspect, Estimate, Subconditions, Summary,
     ThreatLocations, ThresholdTable,
@@ -177,4 +179,135 @@ pub fn criterion_b_from_parts(
     .map_err(|e| format!("{e}"))?;
 
     Ok(assessment.summary())
+}
+
+/// One polygon from a distribution map, in longitude/latitude degrees.
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+pub struct PolygonInput {
+    /// The ecosystem this feature belongs to, usually a Global Ecosystem Typology code.
+    pub ecosystem: String,
+    /// Exterior ring first, then any holes. Ring *position* decides the role, not
+    /// winding — see [`crate::aoo::AooAccumulator::add_polygon`].
+    pub rings: Vec<Vec<[f64; 2]>>,
+}
+
+/// Criterion B spatial metrics for one ecosystem.
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+pub struct EcosystemMetrics {
+    /// The ecosystem these metrics describe.
+    pub ecosystem: String,
+    /// Extent of occurrence in km² — the B1 metric.
+    pub eoo_km2: f64,
+    /// Occupied 10 x 10 km cells after the 1% exclusion — the B2 metric.
+    pub aoo_cells: u32,
+    /// Cells containing any of the ecosystem, before the exclusion. A different
+    /// number from [`Self::aoo_cells`], and not the one B2 uses.
+    pub occupied_cell_count: u32,
+    /// Whether a cell sat close enough to the 1% cutoff that the count is not robust
+    /// to implementation differences, and a human should look.
+    pub aoo_near_boundary: bool,
+}
+
+/// Spatial metrics for a whole distribution map.
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+pub struct DistributionSummary {
+    /// One entry per ecosystem, sorted by code.
+    pub ecosystems: Vec<EcosystemMetrics>,
+    /// Cells that received more extent than they can hold, indicating overlapping
+    /// features of one ecosystem in the source map.
+    pub overfull_cells: u32,
+    /// The CRS the grid is defined in, recorded so a cell count can be traced.
+    pub grid_crs: String,
+    /// Grid cell size in metres.
+    pub cell_size_m: f64,
+}
+
+/// Validate a coordinate, naming the problem rather than silently coping with it.
+fn check_coordinate(ecosystem: &str, [lon, lat]: [f64; 2]) -> Result<(), String> {
+    if !lon.is_finite() || !lat.is_finite() {
+        return Err(format!(
+            "{ecosystem}: coordinate ({lon}, {lat}) is not a finite number"
+        ));
+    }
+    // Out-of-range values are not rounding artefacts. They almost always mean the
+    // coordinates are swapped, or already projected, and clamping them would produce
+    // a plausible-looking but wrong AOO instead of an error.
+    if !(-90.0..=90.0).contains(&lat) {
+        return Err(format!(
+            "{ecosystem}: latitude {lat} is outside -90..90 — are the coordinates \
+             swapped, or already projected?"
+        ));
+    }
+    if !(-180.0..=180.0).contains(&lon) {
+        return Err(format!(
+            "{ecosystem}: longitude {lon} is outside -180..180 — are the coordinates \
+             swapped, or already projected?"
+        ));
+    }
+    Ok(())
+}
+
+/// Compute Criterion B spatial metrics from a distribution map.
+///
+/// Polygons are in longitude/latitude degrees on WGS84. They are projected to
+/// ESRI:54034 internally, because both metrics require an equal-area CRS.
+///
+/// # Errors
+///
+/// Returns a human-readable message if a feature has no exterior ring, or if a
+/// coordinate is non-finite or outside valid longitude/latitude range.
+///
+/// ```
+/// use iucn_rle_core::ffi::{distribution_metrics, PolygonInput};
+///
+/// let summary = distribution_metrics(&[PolygonInput {
+///     ecosystem: "T1.1.1".to_owned(),
+///     rings: vec![vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]],
+/// }])?;
+///
+/// assert_eq!(summary.ecosystems.len(), 1);
+/// assert!(summary.ecosystems[0].eoo_km2 > 12_000.0);
+/// # Ok::<(), String>(())
+/// ```
+pub fn distribution_metrics(polygons: &[PolygonInput]) -> Result<DistributionSummary, String> {
+    let mut accumulator = DistributionAccumulator::new();
+
+    for polygon in polygons {
+        if polygon.rings.is_empty() || polygon.rings[0].is_empty() {
+            return Err(format!(
+                "{}: feature has no exterior ring",
+                polygon.ecosystem
+            ));
+        }
+        for ring in &polygon.rings {
+            for &coordinate in ring {
+                check_coordinate(&polygon.ecosystem, coordinate)?;
+            }
+        }
+        accumulator.add_polygon(&polygon.ecosystem, &polygon.rings);
+    }
+
+    let distribution = accumulator.finish();
+
+    let ecosystems = distribution
+        .ecosystems()
+        .iter()
+        .map(|code| {
+            let aoo = distribution.aoo(code);
+            EcosystemMetrics {
+                ecosystem: code.clone(),
+                eoo_km2: distribution.eoo_km2(code),
+                aoo_cells: aoo.aoo_cells,
+                occupied_cell_count: aoo.occupied_cell_count,
+                aoo_near_boundary: aoo.near_boundary,
+            }
+        })
+        .collect();
+
+    Ok(DistributionSummary {
+        ecosystems,
+        overfull_cells: distribution.grid().overfull_cells(),
+        grid_crs: AOO_CRS.to_owned(),
+        cell_size_m: AOO_CELL_SIZE_M,
+    })
 }

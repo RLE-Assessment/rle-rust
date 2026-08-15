@@ -31,7 +31,8 @@
 use std::ffi::{c_char, CStr, CString};
 
 use iucn_rle_core::ffi::{
-    criterion_b_from_parts, MetricInput, SubconditionInput, SubconditionsInput,
+    criterion_b_from_parts, distribution_metrics, MetricInput, PolygonInput, SubconditionInput,
+    SubconditionsInput,
 };
 use serde::Deserialize;
 
@@ -149,4 +150,41 @@ pub unsafe extern "C" fn iucn_rle_string_free(s: *mut c_char) {
     }
     // SAFETY: the caller contract guarantees this came from CString::into_raw.
     drop(unsafe { CString::from_raw(s) });
+}
+
+/// Compute Criterion B spatial metrics from a distribution map, as JSON.
+///
+/// `polygons_json` is a JSON array of `{"ecosystem": ..., "rings": [[[lon, lat], ...]]}`.
+/// Returns a JSON summary, or a JSON object with an `error` key. The caller owns the
+/// result and must release it with [`iucn_rle_string_free`].
+///
+/// # Safety
+///
+/// `polygons_json` must be NULL or a valid NUL-terminated C string that stays alive
+/// for the duration of the call.
+#[no_mangle]
+pub unsafe extern "C" fn iucn_rle_distribution_metrics(
+    polygons_json: *const c_char,
+) -> *mut c_char {
+    if polygons_json.is_null() {
+        return into_c_string(error_json("polygons_json was NULL"));
+    }
+
+    // SAFETY: the caller contract above guarantees a valid NUL-terminated string.
+    let Ok(text) = (unsafe { CStr::from_ptr(polygons_json) }).to_str() else {
+        return std::ptr::null_mut();
+    };
+
+    let polygons: Vec<PolygonInput> = match serde_json::from_str(text) {
+        Ok(polygons) => polygons,
+        Err(e) => return into_c_string(error_json(&format!("invalid JSON polygons: {e}"))),
+    };
+
+    match distribution_metrics(&polygons) {
+        Ok(summary) => match serde_json::to_string(&summary) {
+            Ok(json) => into_c_string(json),
+            Err(e) => into_c_string(error_json(&format!("could not serialise metrics: {e}"))),
+        },
+        Err(e) => into_c_string(error_json(&e)),
+    }
 }

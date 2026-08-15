@@ -217,6 +217,31 @@ fn the_one_percent_exclusion_is_not_knife_edge_here() {
 }
 
 #[test]
+fn the_extent_of_occurrence_matches_rle_pythons_published_value() {
+    // A second, independent confirmation, and the only one covering EOO — the golden
+    // parquet contains the AOO grid alone.
+    //
+    // rle_workshop/presentation-4-workflow-ruritania.ipynb is a committed notebook
+    // whose executed output reads "EOO is 73.2 km2" and "AOO is 4 cells" for T1.1.1,
+    // computed by rle-python from this same null-island dataset.
+    //
+    // Worth noting the two engines take different routes here. rle-python unions the
+    // features, hulls the result in EPSG:4326 degrees, then reprojects the hull to
+    // measure its area. This engine projects first and hulls in the equal-area plane,
+    // which is where convexity and area actually belong — and needs no union at all,
+    // since the hull of a union is the hull of the combined vertices. Different
+    // method, same answer to the published precision.
+    let distribution = compute();
+
+    let eoo = distribution.eoo_km2("T1.1.1");
+    assert!(
+        (eoo - 73.2).abs() < 0.05,
+        "rle-python publishes 73.2 km2 for T1.1.1, got {eoo}"
+    );
+    assert_eq!(distribution.aoo("T1.1.1").aoo_cells, 4);
+}
+
+#[test]
 fn holes_are_honoured() {
     // Two of the three features carry an interior ring. If holes were ignored, every
     // fraction would come out larger than rle-python's, and the tolerance test above
