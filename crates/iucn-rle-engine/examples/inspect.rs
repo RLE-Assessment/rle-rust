@@ -13,7 +13,9 @@
 
 use std::env;
 
-use iucn_rle_format::geoparquet::{footer_range, parse_footer, Footer, DEFAULT_FOOTER_PREFETCH};
+use iucn_rle_format::geoparquet::{
+    footer_range, parse_footer, Footer, Severity, DEFAULT_FOOTER_PREFETCH,
+};
 use iucn_rle_io::{ByteSource, HttpSource};
 
 fn main() {
@@ -122,5 +124,21 @@ fn main() {
             .collect();
         println!("columns: {} total", columns.len());
         println!("  {}", columns.join(", "));
+
+        // Checks the published JSON Schemas cannot make, because they validate the
+        // `geo` blob without ever seeing the file it describes.
+        let findings = file.check_structure();
+        println!("\nstructural checks: {} finding(s)", findings.len());
+        for finding in &findings {
+            let label = match finding.severity {
+                Severity::Error => "error",
+                Severity::Warning => "warning",
+                Severity::Note => "note",
+            };
+            println!("  {label}: {}", finding.message);
+        }
+        if findings.iter().all(|f| f.severity != Severity::Error) {
+            println!("  (nothing that would stop an assessment)");
+        }
     });
 }

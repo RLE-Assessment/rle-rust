@@ -125,6 +125,29 @@ pub enum FormatError {
     },
 }
 
+/// How serious a structural finding is.
+///
+/// Ordered so that sorting puts the things worth acting on first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Severity {
+    /// The file cannot be read correctly as it stands.
+    Error,
+    /// Readable, but something is likely to surprise: a lost optimisation, a
+    /// declaration that does not match the data.
+    Warning,
+    /// Worth knowing, not worth fixing.
+    Note,
+}
+
+/// Something noticed about a file's metadata.
+#[derive(Debug, Clone)]
+pub struct Finding {
+    /// How serious it is.
+    pub severity: Severity,
+    /// What was noticed, in terms a user can act on.
+    pub message: String,
+}
+
 /// Paths to the four bbox covering columns.
 ///
 /// Each is a path rather than a name because the columns live inside a struct, so the
@@ -718,6 +741,122 @@ impl GeoParquet {
             row_groups,
             ranges: coalesce(ranges),
         })
+    }
+
+    /// Check the metadata against the file it describes.
+    ///
+    /// The published `GeoParquet` JSON Schemas validate the `geo` blob's *shape*: that
+    /// `primary_column` is a non-empty string, that `encoding` is one of a known set.
+    /// They cannot check any of it against the parquet file it sits in, because they
+    /// never see it. That gap is where the problems live — a file can be perfectly
+    /// schema-valid and name a geometry column that does not exist.
+    ///
+    /// Findings are advisory. A file that trips several of these is usually still
+    /// readable, and refusing to read it would block real work to no purpose.
+    #[must_use]
+    pub fn check_structure(&self) -> Vec<Finding> {
+        let mut findings = Vec::new();
+        let schema = self.metadata.file_metadata().schema_descr();
+        let columns: Vec<String> = schema
+            .columns()
+            .iter()
+            .map(|column| column.path().string())
+            .collect();
+        let has = |name: &str| columns.iter().any(|column| column == name);
+
+        let mut error = |message: String| {
+            findings.push(Finding {
+                severity: Severity::Error,
+                message,
+            });
+        };
+
+        // Every declared geometry column should be a column of the file. The primary
+        // one matters most, but a stale entry for a dropped column is worth knowing.
+        for name in self.geo.columns.keys() {
+            if !has(name) {
+                error(format!(
+                    "the `geo` metadata describes a geometry column `{name}`, which \
+                     this file does not have; it has: {}",
+                    columns.join(", ")
+                ));
+            }
+        }
+
+        if !self.geo.primary_is_wkb() {
+            error(format!(
+                "the geometry column is encoded as `{}`, and this reader decodes only \
+                 WKB",
+                self.geo.primary_encoding()
+            ));
+        }
+
+        if !self.geo.primary_is_geographic() {
+            error(format!(
+                "the geometry is in {}, which is projected; the metrics need \
+                 longitude/latitude in degrees, so reproject before assessing",
+                self.geo
+                    .primary_crs_code()
+                    .unwrap_or_else(|| "a projected coordinate system".to_owned())
+            ));
+        }
+
+        match self.geo.primary_covering() {
+            Some(covering) => {
+                for path in [
+                    &covering.xmin,
+                    &covering.ymin,
+                    &covering.xmax,
+                    &covering.ymax,
+                ] {
+                    let name = path.join(".");
+                    if !has(&name) {
+                        // Silently fatal to performance rather than correctness: with
+                        // the columns missing the reader cannot prune, so it reads
+                        // everything and gives right answers slowly, with nothing to
+                        // say why.
+                        error(format!(
+                            "the `geo` metadata points at a bounding-box column \
+                             `{name}`, which this file does not have, so spatial \
+                             pruning is impossible and every row group must be read"
+                        ));
+                    }
+                }
+            }
+            None => findings.push(Finding {
+                severity: Severity::Note,
+                message: "this file has no bbox covering columns, so a spatial query \
+                          must read every row group; writing them makes regional reads \
+                          much cheaper"
+                    .to_owned(),
+            }),
+        }
+
+        if self.geo.primary_covering().is_some() && self.geo.version.starts_with("1.0") {
+            findings.push(Finding {
+                severity: Severity::Note,
+                message: format!(
+                    "this file declares GeoParquet {} but uses `covering`, which was \
+                     introduced in 1.1; that is permitted, and a reader that trusted \
+                     the declared version would discard the bounding-box columns and \
+                     lose all spatial pruning",
+                    self.geo.version
+                ),
+            });
+        }
+
+        if self.geo.primary_crs_code().is_none() {
+            findings.push(Finding {
+                severity: Severity::Note,
+                message: "this file states no CRS, which the specification defines as \
+                          OGC:CRS84 — longitude/latitude on WGS84"
+                    .to_owned(),
+            });
+        }
+
+        // Most serious first: this output is meant to be read top-down and acted on.
+        findings.sort_by_key(|finding| finding.severity);
+        findings
     }
 
     /// Check that the columns an assessment reads use a codec this build can decode.
