@@ -254,3 +254,39 @@ async fn fetch<S: ByteSource + ?Sized>(
 
     Ok(SparseBytes::new(size, chunks))
 }
+
+/// Advice for a URL that failed to read, if its shape suggests a likely cause.
+///
+/// Data portals commonly serve a browsable web interface and the bytes themselves from
+/// different hosts, at otherwise identical paths. Pasting the address bar's URL is the
+/// easiest mistake to make, and the resulting failure — an HTML page that does not
+/// honour range requests — describes a symptom rather than the cause.
+#[must_use]
+pub fn url_hint(url: &str) -> Option<String> {
+    let host = url
+        .split_once("://")
+        .map_or(url, |(_, rest)| rest)
+        .split('/')
+        .next()
+        .unwrap_or_default();
+
+    // source.coop is where this project's own datasets live, so the specific case is
+    // worth naming rather than gesturing at generically.
+    if host.eq_ignore_ascii_case("source.coop") {
+        return Some(format!(
+            "source.coop serves its web interface at this address, and the files \
+             themselves from data.source.coop. Try:\n  {}",
+            url.replacen("source.coop", "data.source.coop", 1)
+        ));
+    }
+
+    if host.starts_with("www.") || url.contains("/blob/") {
+        return Some(
+            "this looks like a web page rather than the file itself; look for a direct \
+             download or raw link"
+                .to_owned(),
+        );
+    }
+
+    None
+}

@@ -382,3 +382,34 @@ fn the_report_accounts_for_every_byte_it_fetched() {
 
     assert_eq!(report.bytes_fetched, source.bytes_fetched());
 }
+
+#[test]
+fn the_web_interface_host_is_recognised_and_corrected() {
+    // Easy mistake, unhelpful error: an HTML page that does not honour range requests,
+    // reported as "ranges unsupported", which sounds like a server problem.
+    let hint = iucn_rle_engine::url_hint(
+        "https://source.coop/tyler/colombia-ecosystems-map/ecosistemas/x.parquet",
+    )
+    .expect("source.coop should be recognised");
+
+    assert!(
+        hint.contains(
+            "https://data.source.coop/tyler/colombia-ecosystems-map/ecosistemas/x.parquet"
+        ),
+        "the hint should offer the corrected URL, not merely describe the problem: {hint}"
+    );
+}
+
+#[test]
+fn the_data_host_gets_no_hint() {
+    // A correct URL that failed for another reason must not be sent chasing this one.
+    assert!(iucn_rle_engine::url_hint(
+        "https://data.source.coop/tyler/colombia-ecosystems-map/ecosistemas/x.parquet"
+    )
+    .is_none());
+}
+
+#[test]
+fn an_ordinary_url_gets_no_hint() {
+    assert!(iucn_rle_engine::url_hint("https://example.org/data/x.parquet").is_none());
+}

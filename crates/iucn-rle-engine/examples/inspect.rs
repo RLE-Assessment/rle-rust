@@ -13,10 +13,24 @@
 
 use std::env;
 
+use iucn_rle_engine::url_hint;
 use iucn_rle_format::geoparquet::{
     footer_range, parse_footer, Footer, GeoParquet, Severity, DEFAULT_FOOTER_PREFETCH,
 };
 use iucn_rle_io::{ByteSource, HttpSource};
+
+/// Report a failure the way a command-line tool should, and stop.
+///
+/// `expect` would print the Debug form, which hides the message the error type went to
+/// the trouble of writing — and for a tool whose whole job is explaining a file, that
+/// is the wrong end to economise on.
+fn fail(context: &str, error: &dyn std::fmt::Display, url: &str) -> ! {
+    eprintln!("error: {context}: {error}");
+    if let Some(hint) = url_hint(url) {
+        eprintln!("hint: {hint}");
+    }
+    std::process::exit(1)
+}
 
 fn main() {
     let Some(url) = env::args().nth(1) else {
@@ -32,19 +46,29 @@ fn main() {
         .expect("a current-thread runtime");
 
     runtime.block_on(async {
-        let source = HttpSource::new(&url).expect("a usable URL");
-        let size = source.size().await.expect("the object's size");
+        let source = match HttpSource::new(&url) {
+            Ok(source) => source,
+            Err(error) => fail("could not use that URL", &error, &url),
+        };
+        let size = match source.size().await {
+            Ok(size) => size,
+            Err(error) => fail("could not read the object", &error, &url),
+        };
         println!("url    {url}");
         println!("size   {size} bytes ({:.2} GB)", size as f64 / 1e9);
 
         let mut range = footer_range(size, DEFAULT_FOOTER_PREFETCH);
         let mut fetched = 0u64;
         let file = loop {
-            let tail = source.read_range(range.clone()).await.expect("the footer");
+            let tail = match source.read_range(range.clone()).await {
+                Ok(tail) => tail,
+                Err(error) => fail("could not read the footer", &error, &url),
+            };
             fetched += tail.len() as u64;
-            match parse_footer(&tail, size).expect("a parquet footer") {
-                Footer::Complete(file) => break file,
-                Footer::NeedMore(wider) => range = wider,
+            match parse_footer(&tail, size) {
+                Ok(Footer::Complete(file)) => break file,
+                Ok(Footer::NeedMore(wider)) => range = wider,
+                Err(error) => fail("this is not a readable GeoParquet file", &error, &url),
             }
         };
 
