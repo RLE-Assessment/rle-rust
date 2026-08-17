@@ -14,7 +14,7 @@
 use std::env;
 
 use iucn_rle_format::geoparquet::{
-    footer_range, parse_footer, Footer, Severity, DEFAULT_FOOTER_PREFETCH,
+    footer_range, parse_footer, Footer, GeoParquet, Severity, DEFAULT_FOOTER_PREFETCH,
 };
 use iucn_rle_io::{ByteSource, HttpSource};
 
@@ -85,60 +85,84 @@ fn main() {
             widest as f64 / 1e6
         );
 
-        let geo = file.geo();
-        println!("geoparquet: {} (as declared by the writer)", geo.version);
-        println!("geometry column: {}", geo.primary_column);
-        println!("encoding: {}", geo.primary_encoding());
+        describe(&file);
+    });
+}
+
+fn describe(file: &GeoParquet) {
+    let geo = file.geo();
+    println!("geoparquet: {} (as declared by the writer)", geo.version);
+    println!("geometry column: {}", geo.primary_column);
+    println!("encoding: {}", geo.primary_encoding());
+    println!(
+        "crs: {} ({})",
+        geo.primary_crs_code()
+            .unwrap_or_else(|| "none stated".into()),
+        if geo.primary_is_geographic() {
+            "geographic — usable"
+        } else {
+            "projected — must be reprojected first"
+        }
+    );
+    // The declared version is reported, and deliberately not trusted. geopandas
+    // 1.1.4 writes "1.0.0" while also writing the `covering` key introduced in
+    // 1.1.0, so what the file *says* and what it *contains* can disagree — which is
+    // worth surfacing here, since a reader that gated on the version would lose all
+    // spatial pruning on files from the most widely used writer there is.
+    match geo.primary_covering() {
+        Some(_) if geo.version.starts_with("1.0") => println!(
+            "bbox covering: present — spatial pruning available, even though the \
+             file declares {} and covering is a 1.1 feature",
+            geo.version
+        ),
+        Some(_) => println!("bbox covering: present — spatial pruning available"),
+        None => println!("bbox covering: absent — every row group must be read"),
+    }
+
+    let columns: Vec<_> = file
+        .metadata()
+        .file_metadata()
+        .schema_descr()
+        .columns()
+        .iter()
+        .map(|column| column.path().string())
+        .collect();
+    println!("columns: {} total", columns.len());
+    println!("  {}", columns.join(", "));
+
+    // Two halves of the same question. Schema validation says the metadata is
+    // well-formed per the specification; the structural checks say it describes
+    // the file it is actually in. A file can pass either and fail the other.
+    let mut findings = Vec::new();
+    #[cfg(feature = "schema-validation")]
+    {
+        let schema_findings = file.validate_against_schema();
         println!(
-            "crs: {} ({})",
-            geo.primary_crs_code()
-                .unwrap_or_else(|| "none stated".into()),
-            if geo.primary_is_geographic() {
-                "geographic — usable"
+            "\nschema validation: {}",
+            if schema_findings.is_empty() {
+                format!(
+                    "conforms to the published GeoParquet {} schema",
+                    file.geo().version
+                )
             } else {
-                "projected — must be reprojected first"
+                format!("{} finding(s)", schema_findings.len())
             }
         );
-        // The declared version is reported, and deliberately not trusted. geopandas
-        // 1.1.4 writes "1.0.0" while also writing the `covering` key introduced in
-        // 1.1.0, so what the file *says* and what it *contains* can disagree — which is
-        // worth surfacing here, since a reader that gated on the version would lose all
-        // spatial pruning on files from the most widely used writer there is.
-        match geo.primary_covering() {
-            Some(_) if geo.version.starts_with("1.0") => println!(
-                "bbox covering: present — spatial pruning available, even though the \
-                 file declares {} and covering is a 1.1 feature",
-                geo.version
-            ),
-            Some(_) => println!("bbox covering: present — spatial pruning available"),
-            None => println!("bbox covering: absent — every row group must be read"),
-        }
-
-        let columns: Vec<_> = file
-            .metadata()
-            .file_metadata()
-            .schema_descr()
-            .columns()
-            .iter()
-            .map(|column| column.path().string())
-            .collect();
-        println!("columns: {} total", columns.len());
-        println!("  {}", columns.join(", "));
-
-        // Checks the published JSON Schemas cannot make, because they validate the
-        // `geo` blob without ever seeing the file it describes.
-        let findings = file.check_structure();
-        println!("\nstructural checks: {} finding(s)", findings.len());
-        for finding in &findings {
-            let label = match finding.severity {
-                Severity::Error => "error",
-                Severity::Warning => "warning",
-                Severity::Note => "note",
-            };
-            println!("  {label}: {}", finding.message);
-        }
-        if findings.iter().all(|f| f.severity != Severity::Error) {
-            println!("  (nothing that would stop an assessment)");
-        }
-    });
+        findings.extend(schema_findings);
+    }
+    #[cfg(not(feature = "schema-validation"))]
+    println!("\nschema validation: not built in (enable the `schema-validation` feature)");
+    findings.extend(file.check_structure());
+    println!("\nstructural checks: {} finding(s)", findings.len());
+    for finding in &findings {
+        let label = match finding.severity {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+            Severity::Note => "note",
+        };
+        println!("  {label}: {}", finding.message);
+    }
+    if findings.iter().all(|f| f.severity != Severity::Error) {
+        println!("  (nothing that would stop an assessment)");
+    }
 }

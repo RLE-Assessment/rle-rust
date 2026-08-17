@@ -6,4 +6,6 @@
 
 pub mod cog;
 pub mod geoparquet;
+#[cfg(feature = "schema-validation")]
+mod schema;
 pub mod wkb;

@@ -149,6 +149,21 @@ cog-fixture:
 cog-fixture-check:
     python3 {{root}}/tools/generate_cog_fixture.py --check
 
+# Re-vendor the published GeoParquet JSON Schemas. Needs network access.
+geoparquet-schemas:
+    python3 {{root}}/tools/vendor_geoparquet_schemas.py
+
+# Fail if the vendored schemas have drifted from geoparquet.org. Needs network access.
+#
+# Not part of `just all`: a drift here means upstream published something, not that this
+# repo is wrong. Run it deliberately.
+geoparquet-schemas-check:
+    python3 {{root}}/tools/vendor_geoparquet_schemas.py --check
+
+# Validate a GeoParquet file's metadata, against the published schema and the file.
+inspect url:
+    cargo run -p iucn-rle-engine --features schema-validation --example inspect -- "{{url}}"
+
 # Build the documentation site into docs/_build.
 docs: docs-thresholds
     cd {{root}}/docs && npx -y mystmd@latest build --html

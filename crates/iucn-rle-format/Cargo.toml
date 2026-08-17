@@ -51,6 +51,18 @@ version = "56.2.1"
 default-features = false
 features = ["arrow", "snap", "brotli", "flate2-rust_backened", "lz4", "zstd"]
 
+# Optional because it is not free: boon reaches getrandom through ahash, which needs a
+# browser backend and a build-wide RUSTFLAGS cfg to compile for wasm32. Validation is a
+# tooling concern rather than a reading concern, so the browser build should not pay for
+# it. Off by default; the CLI and CI turn it on.
+[dependencies.boon]
+version = "0.6"
+optional = true
+
+[features]
+default = []
+schema-validation = ["dep:boon"]
+
 [dev-dependencies]
 serde_json = { workspace = true }
 iucn-rle-core = { workspace = true }

@@ -125,6 +125,9 @@ pub enum FormatError {
     },
 }
 
+#[cfg(feature = "schema-validation")]
+pub use crate::schema::{published_schema_versions, schema_for_version};
+
 /// How serious a structural finding is.
 ///
 /// Ordered so that sorting puts the things worth acting on first.
@@ -205,6 +208,12 @@ pub struct GeoMetadata {
     columns: std::collections::HashMap<String, GeoColumn>,
     #[serde(skip)]
     covering: Option<Covering>,
+    /// The metadata exactly as the writer wrote it.
+    ///
+    /// Kept verbatim because validation must judge what is in the file, not what this
+    /// crate's types happen to round-trip to.
+    #[serde(skip)]
+    raw: String,
 }
 
 impl GeoMetadata {
@@ -455,6 +464,7 @@ fn parse_geo_metadata(metadata: &ParquetMetaData) -> Result<GeoMetadata, FormatE
 
     let mut geo: GeoMetadata = serde_json::from_str(raw)
         .map_err(|error| FormatError::BadGeoMetadata(error.to_string()))?;
+    raw.clone_into(&mut geo.raw);
 
     if !geo.columns.contains_key(&geo.primary_column) {
         return Err(FormatError::BadGeoMetadata(format!(
@@ -857,6 +867,20 @@ impl GeoParquet {
         // Most serious first: this output is meant to be read top-down and acted on.
         findings.sort_by_key(|finding| finding.severity);
         findings
+    }
+
+    /// Validate the `geo` metadata against the schema published for its version.
+    ///
+    /// Says the metadata is well-formed per the specification, and nothing about
+    /// whether it matches the file it sits in — a schema never sees the parquet around
+    /// it. Pair it with [`Self::check_structure`], which covers exactly that gap.
+    ///
+    /// Needs the `schema-validation` feature. Never touches the network: the published
+    /// schemas, and the PROJJSON schemas they reference, are vendored.
+    #[cfg(feature = "schema-validation")]
+    #[must_use]
+    pub fn validate_against_schema(&self) -> Vec<Finding> {
+        crate::schema::validate(&self.geo, &self.geo.raw)
     }
 
     /// Check that the columns an assessment reads use a codec this build can decode.
