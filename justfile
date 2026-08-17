@@ -138,6 +138,17 @@ geoparquet-fixture:
 geoparquet-fixture-check:
     python3 {{root}}/tools/generate_geoparquet_fixture.py --check
 
+# Regenerate the Cloud-Optimized GeoTIFF fixtures. Needs the GDAL command-line tools.
+cog-fixture:
+    python3 {{root}}/tools/generate_cog_fixture.py
+
+# Fail if the COG fixtures no longer match what GDAL's COG driver writes.
+#
+# Not part of `just all`, for the same reason as the GeoParquet check: drift here means
+# GDAL changed, not that this repo is wrong. Run it deliberately when upgrading GDAL.
+cog-fixture-check:
+    python3 {{root}}/tools/generate_cog_fixture.py --check
+
 # Build the documentation site into docs/_build.
 docs: docs-thresholds
     cd {{root}}/docs && npx -y mystmd@latest build --html

@@ -4,5 +4,6 @@
 //! is no async, no network, and no `Send` bound anywhere, which is what lets the whole
 //! stack target `wasm32-unknown-unknown`. Fetching bytes is `iucn-rle-io`'s job.
 
+pub mod cog;
 pub mod geoparquet;
 pub mod wkb;

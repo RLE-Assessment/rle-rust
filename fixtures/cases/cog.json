@@ -1,0 +1,90 @@
+{
+  "description": "Cloud-Optimized GeoTIFFs written by GDAL's COG driver, in ESRI:54034 with 10 km pixels, used to check windowed raster reading over byte ranges.",
+  "generated_by": "GDAL",
+  "width": 512,
+  "height": 512,
+  "block_size": 256,
+  "pixel_metres": 10000.0,
+  "crs": "ESRI:54034",
+  "data_type": "Byte",
+  "geotransform": [
+    0.0,
+    10000.0,
+    0.0,
+    0.0,
+    0.0,
+    -10000.0
+  ],
+  "tiles_across": 2,
+  "tiles_down": 2,
+  "probes": [
+    {
+      "x": 0,
+      "y": 0,
+      "value": 0
+    },
+    {
+      "x": 255,
+      "y": 255,
+      "value": 27
+    },
+    {
+      "x": 256,
+      "y": 0,
+      "value": 4
+    },
+    {
+      "x": 0,
+      "y": 256,
+      "value": 32
+    },
+    {
+      "x": 511,
+      "y": 511,
+      "value": 63
+    },
+    {
+      "x": 300,
+      "y": 100,
+      "value": 12
+    }
+  ],
+  "files": {
+    "deflate": {
+      "path": "fixtures/data/ecosystems_cog.tif",
+      "layout": {
+        "byte_order": "little",
+        "first_ifd_offset": 192,
+        "ifd_count": 2,
+        "ifd_offsets": [
+          192,
+          880
+        ]
+      }
+    },
+    "uncompressed": {
+      "path": "fixtures/data/ecosystems_cog_uncompressed.tif",
+      "layout": {
+        "byte_order": "little",
+        "first_ifd_offset": 192,
+        "ifd_count": 2,
+        "ifd_offsets": [
+          192,
+          868
+        ]
+      }
+    },
+    "geographic": {
+      "path": "fixtures/data/ecosystems_cog_wgs84.tif",
+      "layout": {
+        "byte_order": "little",
+        "first_ifd_offset": 192,
+        "ifd_count": 2,
+        "ifd_offsets": [
+          192,
+          692
+        ]
+      }
+    }
+  }
+}

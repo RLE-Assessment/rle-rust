@@ -557,6 +557,27 @@ impl SparseBytes {
         Self { file_size, chunks }
     }
 
+    /// Total size of the object these ranges came from.
+    #[must_use]
+    pub fn file_size(&self) -> u64 {
+        self.file_size
+    }
+
+    /// The fetched bytes running forward from `start`, if that offset was fetched.
+    ///
+    /// Stops at the end of whichever chunk contains `start`, so a caller reading
+    /// forward never crosses silently from fetched bytes into a gap.
+    #[must_use]
+    pub fn contiguous_from(&self, start: u64) -> Option<&[u8]> {
+        self.chunks.iter().find_map(|(offset, bytes)| {
+            let end = offset + bytes.len() as u64;
+            (start >= *offset && start < end).then(|| {
+                let from = usize::try_from(start - offset).ok()?;
+                bytes.get(from..)
+            })?
+        })
+    }
+
     fn slice(&self, start: u64, length: usize) -> Result<Bytes, FormatError> {
         let end = start + length as u64;
         for (offset, bytes) in &self.chunks {

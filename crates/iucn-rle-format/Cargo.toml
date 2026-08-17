@@ -25,8 +25,14 @@ parquet = { version = "56.2.1", default-features = false, features = ["arrow"] }
 arrow-array = "56.2"
 arrow-schema = "56.2"
 
+# Pure Rust, so it targets wasm32 unchanged. Chosen over async-tiff, which cannot
+# target wasm32 at any feature combination: it pulls object_store and reqwest by
+# default, and zstd-sys is unconditional rather than a feature.
+tiff = "0.10.3"
+
 [dev-dependencies]
 serde_json = { workspace = true }
+iucn-rle-core = { workspace = true }
 
 [lints]
 workspace = true
