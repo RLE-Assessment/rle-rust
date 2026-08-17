@@ -536,6 +536,42 @@ impl Cog {
         tiles
     }
 
+    /// One tile's own byte range, without the header.
+    ///
+    /// Separate from [`Self::ranges_for`] so a caller reading many tiles can hold the
+    /// header once and fetch only the tile that changes — refetching the header per
+    /// tile would multiply requests for bytes it already has.
+    #[must_use]
+    pub fn tile_byte_range(&self, tile: usize) -> Option<Range<u64>> {
+        let start = *self.tile_offsets.get(tile)?;
+        let length = *self.tile_byte_counts.get(tile)?;
+        Some(start..start + length)
+    }
+
+    /// How many tiles the raster has.
+    #[must_use]
+    pub fn tile_count(&self) -> usize {
+        self.tile_offsets.len()
+    }
+
+    /// The pixel window one tile covers, clipped to the raster.
+    #[must_use]
+    pub fn tile_window(&self, tile: usize) -> PixelWindow {
+        let across = self.tiles_across();
+        // A raster with more than u32::MAX tiles cannot be addressed by the TIFF
+        // chunk API either, so saturating here reports an empty window rather than
+        // wrapping to a wrong one.
+        let index = u32::try_from(tile).unwrap_or(u32::MAX);
+        let (col, row) = (index % across, index / across);
+        PixelWindow::new(
+            col * self.tile_width,
+            row * self.tile_height,
+            self.tile_width,
+            self.tile_height,
+        )
+        .clipped(self.width, self.height)
+    }
+
     /// Every byte range needed to decode those tiles, ascending and non-overlapping.
     ///
     /// The header is always included, because decoding re-reads the IFD to find where

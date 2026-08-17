@@ -52,6 +52,20 @@ pub enum EngineError {
         found: String,
     },
 
+    /// Decoding a raster failed.
+    #[error(transparent)]
+    Cog(#[from] iucn_rle_format::cog::CogError),
+
+    /// The raster is not in the AOO grid's coordinate system.
+    #[error(
+        "this raster is in {found}, but the AOO grid is defined in ESRI:54034; pixels \
+         are only rectangles in that plane, so reproject it before assessing"
+    )]
+    NotGridCrs {
+        /// What the file's projection keys said.
+        found: String,
+    },
+
     /// The geometry column uses an encoding this reader does not decode.
     #[error("this dataset stores geometry as {encoding}, and only WKB is supported")]
     UnsupportedEncoding {
@@ -289,4 +303,78 @@ pub fn url_hint(url: &str) -> Option<String> {
     }
 
     None
+}
+
+/// What a raster read did.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RasterReport {
+    /// Tiles fetched and decoded.
+    pub tiles_read: usize,
+    /// Bytes fetched, header included.
+    pub bytes_fetched: u64,
+    /// The largest single tile fetched — what bounds peak memory.
+    pub peak_tile_bytes: u64,
+}
+
+/// Read a remote Cloud-Optimized `GeoTIFF` into an AOO accumulator, a tile at a time.
+///
+/// `class` is the pixel value identifying the ecosystem; pixels holding it count as
+/// fully covered and everything else as empty, which is what a categorical map means.
+///
+/// The header is fetched once and reused, so each iteration transfers one tile and
+/// holds one decoded window. Peak memory is a tile, not a raster.
+///
+/// # Errors
+///
+/// [`EngineError::NotGridCrs`] if the raster is not in the AOO grid's CRS — refused
+/// rather than approximated, since pixels stop being rectangles in any other plane.
+pub async fn accumulate_cog<S: ByteSource + ?Sized>(
+    source: &S,
+    ecosystem: &str,
+    class: f64,
+    accumulator: &mut iucn_rle_core::aoo::AooAccumulator,
+) -> Result<RasterReport, EngineError> {
+    use iucn_rle_format::cog::{header_range, parse_header, Header, DEFAULT_HEADER_PREFETCH};
+
+    let mut report = RasterReport::default();
+    let size = source.size().await?;
+
+    let mut range = header_range(size, DEFAULT_HEADER_PREFETCH);
+    let (cog, header_bytes) = loop {
+        let head = source.read_range(range.clone()).await?;
+        report.bytes_fetched += head.len() as u64;
+        match parse_header(&head, size)? {
+            Header::Complete(cog) => break (cog, head),
+            Header::NeedMore(wider) => range = wider,
+        }
+    };
+
+    if !cog.is_aoo_crs() {
+        return Err(EngineError::NotGridCrs {
+            found: cog.crs_description(),
+        });
+    }
+
+    for tile in 0..cog.tile_count() {
+        let Some(tile_range) = cog.tile_byte_range(tile) else {
+            continue;
+        };
+        let tile_bytes = source.read_range(tile_range.clone()).await?;
+        report.bytes_fetched += tile_bytes.len() as u64;
+        report.peak_tile_bytes = report.peak_tile_bytes.max(tile_bytes.len() as u64);
+
+        // The header is reused rather than refetched: the decoder re-reads the IFD to
+        // find the tile, and those bytes are already in hand.
+        let fetched = SparseBytes::new(
+            size,
+            vec![(0, header_bytes.clone()), (tile_range.start, tile_bytes)],
+        );
+        let raster = cog.decode(cog.tile_window(tile), &fetched)?;
+        let coverage = raster.mask(class);
+        accumulator.add_raster(ecosystem, &raster.as_window(&coverage));
+        report.tiles_read += 1;
+        // The decoded tile and its mask are dropped here, before the next is fetched.
+    }
+
+    Ok(report)
 }
