@@ -314,3 +314,71 @@ fn a_file_without_covering_still_prunes_by_ecosystem() {
     let plan = file.plan(&query, ECO_COLUMN).unwrap();
     assert_eq!(plan.row_groups(), &[3]);
 }
+
+#[test]
+fn a_zstd_compressed_file_decodes_identically() {
+    // What real GeoParquet is written with — Colombia's national ecosystems map among
+    // them. Every other fixture here is uncompressed, so without this the common case
+    // is the untested one. ZSTD is also the only widespread codec that cannot reach the
+    // browser, since the crate binds a C library, so this pins that native keeps it.
+    let (plain, plain_bytes) = fixture();
+    let (zstd, zstd_bytes) = open("ecosystems_zstd.parquet");
+
+    let plain_plan = plain.plan(&Query::default(), ECO_COLUMN).unwrap();
+    let zstd_plan = zstd.plan(&Query::default(), ECO_COLUMN).unwrap();
+
+    let from_plain = plain
+        .decode_row_group(0, &fetch(&plain_bytes, &plain_plan), ECO_COLUMN)
+        .unwrap();
+    let from_zstd = zstd
+        .decode_row_group(0, &fetch(&zstd_bytes, &zstd_plan), ECO_COLUMN)
+        .unwrap();
+
+    assert_eq!(from_zstd.len(), from_plain.len());
+    for (compressed, plain) in from_zstd.iter().zip(&from_plain) {
+        assert_eq!(compressed.ecosystem, plain.ecosystem);
+        assert_eq!(compressed.polygons, plain.polygons);
+    }
+}
+
+#[test]
+fn compression_shrinks_the_bytes_that_must_be_fetched() {
+    // The saving compounds with row-group pruning rather than replacing it, and it is
+    // the reason real files use it.
+    let (_, plain_bytes) = fixture();
+    let (_, zstd_bytes) = open("ecosystems_zstd.parquet");
+
+    assert!(
+        zstd_bytes.len() < plain_bytes.len(),
+        "zstd {} vs uncompressed {}",
+        zstd_bytes.len(),
+        plain_bytes.len()
+    );
+}
+
+#[test]
+fn streaming_a_row_group_yields_exactly_what_decoding_it_returns() {
+    // Decoding a row group in one go is convenient and holds every feature in it at
+    // once; on a national file that is hundreds of megabytes of coordinates for no
+    // reason, since each feature is folded into an accumulator and then dropped.
+    // Streaming exists to avoid that, so the two must agree feature for feature.
+    let (file, bytes) = fixture();
+    let plan = file.plan(&Query::default(), ECO_COLUMN).unwrap();
+    let fetched = fetch(&bytes, &plan);
+
+    let collected = file.decode_row_group(0, &fetched, ECO_COLUMN).unwrap();
+
+    let mut streamed = Vec::new();
+    let count = file
+        .for_each_feature(0, &fetched, ECO_COLUMN, |ecosystem, polygons| {
+            streamed.push((ecosystem.to_owned(), polygons.to_vec()));
+        })
+        .unwrap();
+
+    assert_eq!(count, collected.len(), "same number of features");
+    assert_eq!(streamed.len(), collected.len());
+    for ((ecosystem, polygons), feature) in streamed.iter().zip(&collected) {
+        assert_eq!(ecosystem, &feature.ecosystem);
+        assert_eq!(polygons, &feature.polygons);
+    }
+}

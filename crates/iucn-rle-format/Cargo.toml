@@ -19,9 +19,20 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 # default-features = false drops the async reader, which brings tokio and would not
-# build for wasm32. "arrow" is what turns column chunks into typed arrays. Verified to
-# compile for wasm32-unknown-unknown at exactly this feature set.
-parquet = { version = "56.2.1", default-features = false, features = ["arrow"] }
+# build for wasm32. "arrow" turns column chunks into typed arrays.
+#
+# The compression codecs are chosen by what they are written in, not by taste. snap,
+# brotli, flate2 and lz4 are pure Rust and reach the browser unchanged. zstd is the
+# exception: it binds a C library, so it is added for native targets only, below.
+parquet = { version = "56.2.1", default-features = false, features = [
+    "arrow",
+    "snap",
+    "brotli",
+    # The pure-Rust zlib backend (miniz_oxide). The alternative, flate2-zlib-rs, would
+    # bring C in and end the browser build. The crate spells its feature "backened".
+    "flate2-rust_backened",
+    "lz4",
+] }
 arrow-array = "56.2"
 arrow-schema = "56.2"
 
@@ -29,6 +40,16 @@ arrow-schema = "56.2"
 # target wasm32 at any feature combination: it pulls object_store and reqwest by
 # default, and zstd-sys is unconditional rather than a feature.
 tiff = "0.10.3"
+
+# ZSTD is what real GeoParquet is actually written with — Colombia's national ecosystems
+# map among them — so a reader without it is not much use off the test bench. It is also
+# the one common codec that cannot reach the browser: the crate binds a C library, and
+# its build fails for wasm32-unknown-unknown. Native gets it; the WASM build keeps every
+# pure-Rust codec and reports an honest error on a ZSTD file rather than mis-decoding it.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.parquet]
+version = "56.2.1"
+default-features = false
+features = ["arrow", "snap", "brotli", "flate2-rust_backened", "lz4", "zstd"]
 
 [dev-dependencies]
 serde_json = { workspace = true }

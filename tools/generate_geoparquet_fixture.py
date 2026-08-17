@@ -56,6 +56,11 @@ DATA_NO_COVERING = ROOT / "fixtures" / "data" / "ecosystems_no_covering.parquet"
 # whether a reader streams or not. Only a file whose row groups dominate its footer can
 # tell the two apart.
 DATA_MANY = ROOT / "fixtures" / "data" / "ecosystems_many.parquet"
+# ZSTD is what real GeoParquet is actually written with, Colombia's national ecosystems
+# map included, so a reader that only ever meets uncompressed fixtures is untested
+# against the common case. It is also the one widespread codec that cannot reach the
+# browser, since the crate binds a C library — which makes it worth pinning explicitly.
+DATA_ZSTD = ROOT / "fixtures" / "data" / "ecosystems_zstd.parquet"
 MANIFEST = ROOT / "fixtures" / "cases" / "geoparquet.json"
 
 # Big enough that one row group is a small fraction of the file, small enough to sit in
@@ -130,6 +135,20 @@ def build_many() -> gpd.GeoDataFrame:
                 }
             )
     return gpd.GeoDataFrame(records, crs="EPSG:4326")
+
+
+# Real national datasets are rarely in EPSG:4326. Colombia's ecosystems map — the file
+# this milestone exists to read — is in EPSG:4686 (MAGNA-SIRGAS), which is geographic
+# and in degrees but is not 4326. An allow-list of one code would refuse it, so these
+# two fixtures pin the distinction that actually matters: degrees are usable, and a
+# projected CRS is not.
+CRS_VARIANTS = {
+    # MAGNA-SIRGAS, exactly what the Colombia file uses.
+    "magna": ("EPSG:4686", "ecosystems_magna.parquet"),
+    # MAGNA-SIRGAS / Colombia Bogota zone — metres, and a real choice for Colombian
+    # data, so the refusal is not a straw man.
+    "projected": ("EPSG:3116", "ecosystems_projected.parquet"),
+}
 
 
 def manifest_for(frame: gpd.GeoDataFrame, path: Path) -> dict:
@@ -233,10 +252,44 @@ def main() -> int:
         compression=None,
     )
 
+    crs_paths = {}
+    for name, (code, filename) in CRS_VARIANTS.items():
+        variant_target = (
+            DATA.parent / filename
+            if not args.check
+            else DATA.parent / f"{filename}.check.parquet"
+        )
+        reprojected = frame.to_crs(code)
+        reprojected.to_parquet(
+            variant_target,
+            row_group_size=ROW_GROUP_SIZE,
+            write_covering_bbox=True,
+            compression=None,
+        )
+        crs_paths[name] = (variant_target, code, filename)
+
+    zstd_target = (
+        DATA_ZSTD if not args.check else DATA_ZSTD.with_suffix(".check.parquet")
+    )
+    frame.to_parquet(
+        zstd_target,
+        row_group_size=ROW_GROUP_SIZE,
+        write_covering_bbox=True,
+        compression="zstd",
+    )
+
     manifest = manifest_for(frame, target)
     manifest["path"] = str(DATA.relative_to(ROOT))
     manifest["file_size"] = target.stat().st_size
     manifest["path_without_covering"] = str(DATA_NO_COVERING.relative_to(ROOT))
+    manifest["compressed_fixture"] = {
+        "path": str(DATA_ZSTD.relative_to(ROOT)),
+        "compression": "zstd",
+    }
+    manifest["crs_variants"] = {
+        name: {"path": f"fixtures/data/{filename}", "crs": code}
+        for name, (_, code, filename) in crs_paths.items()
+    }
     manifest["streaming_fixture"] = {
         "path": str(DATA_MANY.relative_to(ROOT)),
         "num_rows": len(many),
@@ -248,6 +301,9 @@ def main() -> int:
         target.unlink()
         plain.unlink()
         many_target.unlink()
+        zstd_target.unlink()
+        for variant_target, _, _ in crs_paths.values():
+            variant_target.unlink()
         if not MANIFEST.exists():
             print(f"{MANIFEST} does not exist; run without --check", file=sys.stderr)
             return 1

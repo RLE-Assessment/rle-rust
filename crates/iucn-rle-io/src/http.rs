@@ -88,9 +88,22 @@ impl ByteSource for HttpSource {
             });
         }
 
+        // Read the header, not `content_length()`. The latter reports the length of the
+        // *body*, and a HEAD response has none — so it answers 0 for every object, and
+        // the failure surfaces later as "this file is too short to be parquet", blaming
+        // the file for a mistake made in the request.
         let size = response
-            .content_length()
-            .ok_or_else(|| IoError::Transport(format!("HEAD {} gave no length", self.url)))?;
+            .headers()
+            .get(reqwest::header::CONTENT_LENGTH)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<u64>().ok())
+            .ok_or_else(|| {
+                IoError::Transport(format!(
+                    "HEAD {} gave no usable Content-Length, so the object's size is \
+                     unknown and its footer cannot be located",
+                    self.url
+                ))
+            })?;
 
         *self.size.borrow_mut() = Some(size);
         Ok(size)

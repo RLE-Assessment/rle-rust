@@ -20,6 +20,10 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 bytes = { workspace = true }
+# Only the examples need a reactor: reqwest's native transport drives one, while the
+# browser's Fetch does not. Keeping it out of the library is what lets the engine
+# target wasm32.
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
 futures = { version = "0.3", default-features = false, features = ["executor"] }
 
 [lints]

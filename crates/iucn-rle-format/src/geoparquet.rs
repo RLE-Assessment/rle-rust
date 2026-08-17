@@ -109,6 +109,20 @@ pub enum FormatError {
     /// Reading the row group failed.
     #[error("could not read row group: {0}")]
     Read(String),
+
+    /// The file is compressed with a codec this build cannot decode.
+    ///
+    /// Raised from the footer rather than left to surface mid-decode, where the
+    /// underlying message is a bare "Disabled feature at compile time".
+    #[error(
+        "this file's geometry is {codec}-compressed, which this build cannot decode: {reason}"
+    )]
+    UnsupportedCompression {
+        /// The codec the file used.
+        codec: String,
+        /// Why it is unavailable, and what to do instead.
+        reason: &'static str,
+    },
 }
 
 /// Paths to the four bbox covering columns.
@@ -206,6 +220,43 @@ impl GeoMetadata {
             .map(|number| number.to_string())
             .or_else(|| code.as_str().map(ToOwned::to_owned))?;
         Some(format!("{authority}:{code}"))
+    }
+
+    /// Whether the primary column's coordinates are longitude and latitude in degrees.
+    ///
+    /// This, not an EPSG code, is what a caller needs to know. Real national datasets
+    /// are routinely in their own geographic CRS — Colombia's ecosystems map is
+    /// EPSG:4686, MAGNA-SIRGAS — so an allow-list containing 4326 would refuse the very
+    /// files this exists to read. PROJJSON states the CRS `type` and its axis units
+    /// directly, which answers the question for any CRS rather than for a known few.
+    ///
+    /// A file with no CRS at all counts as geographic: the specification makes that
+    /// OGC:CRS84.
+    #[must_use]
+    pub fn primary_is_geographic(&self) -> bool {
+        let Some(Some(crs)) = self.primary().map(|column| column.crs.as_ref()) else {
+            return true;
+        };
+        // A JSON null is how "no CRS" is spelled in practice, and means CRS84 too.
+        if crs.is_null() {
+            return true;
+        }
+
+        if crs.get("type").and_then(serde_json::Value::as_str) != Some("GeographicCRS") {
+            return false;
+        }
+
+        // A GeographicCRS can still be in gradians or radians. Degrees are what the
+        // projection code expects, so anything else has to be refused rather than
+        // scaled by a guess.
+        crs.get("coordinate_system")
+            .and_then(|system| system.get("axis"))
+            .and_then(serde_json::Value::as_array)
+            .is_none_or(|axes| {
+                axes.iter().all(|axis| {
+                    axis.get("unit").and_then(serde_json::Value::as_str) == Some("degree")
+                })
+            })
     }
 
     /// Bbox covering columns for the primary column, if the file wrote them.
@@ -669,6 +720,36 @@ impl GeoParquet {
         })
     }
 
+    /// Check that the columns an assessment reads use a codec this build can decode.
+    ///
+    /// Worth doing from the footer, because the alternative is discovering it after
+    /// fetching a row group — and on a national file that is a long wait for a message
+    /// that does not say what to do.
+    ///
+    /// # Errors
+    ///
+    /// [`FormatError::UnsupportedCompression`], or [`FormatError::NoSuchColumn`] if
+    /// `ecosystem_column` is not in the file.
+    pub fn check_compression(&self, ecosystem_column: &str) -> Result<(), FormatError> {
+        let leaves = [
+            self.leaf_index(ecosystem_column)?,
+            self.leaf_index(&self.geo.primary_column)?,
+        ];
+
+        for group in self.metadata.row_groups() {
+            for leaf in leaves {
+                let codec = group.column(leaf).compression();
+                if let Some(reason) = unavailable(codec) {
+                    return Err(FormatError::UnsupportedCompression {
+                        codec: format!("{codec:?}"),
+                        reason,
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// The byte ranges one row group needs, for the columns an assessment reads.
     ///
     /// Separate from [`Self::plan`] because streaming wants them a row group at a time:
@@ -699,18 +780,34 @@ impl GeoParquet {
         Ok(coalesce(ranges))
     }
 
-    /// Decode one row group from bytes that were fetched for it.
+    /// Decode one row group, handing each feature to `visit` and then dropping it.
+    ///
+    /// Returns how many features were visited.
+    ///
+    /// The callback exists for memory rather than style. A row group of Colombia's
+    /// national ecosystems map holds 10,000 features and 114 MB of geometry;
+    /// materialising all of them costs that again in decoded coordinates, plus an
+    /// allocation per ring, for data each caller folds into an accumulator and
+    /// immediately discards. Visiting them one at a time keeps the decoded working set
+    /// to a single feature.
+    ///
+    /// Features with no geometry are skipped: they can contribute to neither metric,
+    /// and counting them would add an ecosystem with no area.
     ///
     /// # Errors
     ///
     /// [`FormatError::MissingBytes`] if the plan's ranges were not all supplied, and
     /// [`FormatError::Geometry`] if the WKB does not decode.
-    pub fn decode_row_group(
+    pub fn for_each_feature<F>(
         &self,
         index: usize,
         bytes: &SparseBytes,
         ecosystem_column: &str,
-    ) -> Result<Vec<Feature>, FormatError> {
+        mut visit: F,
+    ) -> Result<usize, FormatError>
+    where
+        F: FnMut(&str, &[crate::wkb::Polygon]),
+    {
         use parquet::arrow::arrow_reader::{
             ArrowReaderMetadata, ArrowReaderOptions, ParquetRecordBatchReaderBuilder,
         };
@@ -731,7 +828,7 @@ impl GeoParquet {
                 .build()
                 .map_err(|error| FormatError::Read(error.to_string()))?;
 
-        let mut features = Vec::new();
+        let mut visited = 0;
         for batch in reader {
             let batch = batch.map_err(|error| FormatError::Read(error.to_string()))?;
             let codes = string_column(&batch, ecosystem_column)?;
@@ -743,17 +840,42 @@ impl GeoParquet {
                     // the row would add an ecosystem with no area.
                     continue;
                 };
-                features.push(Feature {
-                    ecosystem: codes.get(row).copied().flatten().unwrap_or("").to_owned(),
-                    polygons: crate::wkb::decode_polygons(wkb).map_err(|source| {
-                        FormatError::Geometry {
-                            column: self.geo.primary_column.clone(),
-                            source,
-                        }
-                    })?,
-                });
+                let polygons =
+                    crate::wkb::decode_polygons(wkb).map_err(|source| FormatError::Geometry {
+                        column: self.geo.primary_column.clone(),
+                        source,
+                    })?;
+                visit(codes.get(row).copied().flatten().unwrap_or(""), &polygons);
+                visited += 1;
+                // `polygons` is dropped here. Holding every feature of a row group
+                // instead costs hundreds of megabytes on a national file, for data
+                // that is folded into an accumulator and immediately finished with.
             }
         }
+        Ok(visited)
+    }
+
+    /// Decode one row group into a vector of features.
+    ///
+    /// Convenient, and it holds every feature of the row group at once. Prefer
+    /// [`Self::for_each_feature`] for anything large.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::for_each_feature`].
+    pub fn decode_row_group(
+        &self,
+        index: usize,
+        bytes: &SparseBytes,
+        ecosystem_column: &str,
+    ) -> Result<Vec<Feature>, FormatError> {
+        let mut features = Vec::new();
+        self.for_each_feature(index, bytes, ecosystem_column, |ecosystem, polygons| {
+            features.push(Feature {
+                ecosystem: ecosystem.to_owned(),
+                polygons: polygons.to_vec(),
+            });
+        })?;
         Ok(features)
     }
 
@@ -966,4 +1088,28 @@ fn binary_column<'a>(
         found: column.data_type().to_string(),
         expected: "a binary column holding WKB",
     })
+}
+
+/// Why a codec cannot be decoded by this build, or `None` if it can.
+///
+/// The split is by implementation language, not preference. Snappy, gzip, brotli and
+/// LZ4 are pure Rust and go everywhere the rest of this crate goes. ZSTD binds a C
+/// library whose build fails for `wasm32-unknown-unknown`, so it is compiled in for
+/// native targets only — which matters, because ZSTD is what real `GeoParquet` is
+/// actually written with.
+fn unavailable(codec: parquet::basic::Compression) -> Option<&'static str> {
+    use parquet::basic::Compression;
+
+    match codec {
+        Compression::ZSTD(_) if cfg!(target_arch = "wasm32") => Some(
+            "ZSTD needs a C library that cannot be compiled to WebAssembly, so the \
+             browser build omits it; read this file from a native build, or rewrite it \
+             with snappy or gzip compression",
+        ),
+        Compression::LZO => Some(
+            "LZO is not implemented by the parquet reader this library uses; rewrite \
+             the file with snappy, gzip or zstd compression",
+        ),
+        _ => None,
+    }
 }

@@ -42,10 +42,10 @@ pub enum EngineError {
     #[error(transparent)]
     Format(#[from] FormatError),
 
-    /// The file's geometry is not in a coordinate system the metrics accept.
+    /// The file's geometry is not in longitude and latitude.
     #[error(
-        "this dataset is in {found}, but the metrics need longitude/latitude on WGS84 \
-         (EPSG:4326 or OGC:CRS84); reproject it before assessing"
+        "this dataset is in {found}, but the metrics need longitude/latitude in \
+         degrees; reproject it to a geographic CRS before assessing"
     )]
     NotGeographic {
         /// The CRS the file declared.
@@ -74,6 +74,14 @@ pub struct ReadReport {
     pub features: usize,
     /// Bytes fetched, footer included.
     pub bytes_fetched: u64,
+    /// The coordinate reference system the file declared, if it named one.
+    ///
+    /// Recorded because the metrics project from longitude/latitude assuming WGS84,
+    /// while real data often arrives on a national datum — MAGNA-SIRGAS for Colombia.
+    /// The difference is far below the resolution of a 10 km grid, but it is an
+    /// assumption, and an assessment's provenance should say which datum it rested on
+    /// rather than quietly equating the two.
+    pub crs: Option<String>,
 }
 
 /// How to read, for callers who know something about their files.
@@ -140,6 +148,7 @@ pub async fn accumulate_geoparquet_with<S: ByteSource + ?Sized>(
     let file = open(source, options, &mut report).await?;
 
     check_readable(&file, ecosystem_column)?;
+    report.crs = file.geo().primary_crs_code();
 
     let plan = file.plan(query, ecosystem_column)?;
     report.row_groups_skipped = file.row_groups().len() - plan.row_groups().len();
@@ -148,15 +157,18 @@ pub async fn accumulate_geoparquet_with<S: ByteSource + ?Sized>(
         let ranges = file.ranges_for_row_group(index, ecosystem_column)?;
         let bytes = fetch(source, &ranges, &mut report).await?;
 
-        for feature in file.decode_row_group(index, &bytes, ecosystem_column)? {
-            // A MultiPolygon's parts go in separately: each contributes to the AOO on
-            // its own, and merging them into one ring list would read the second part's
-            // exterior as a hole in the first.
-            for polygon in &feature.polygons {
-                accumulator.add_polygon(&feature.ecosystem, polygon);
-            }
-            report.features += 1;
-        }
+        // Streamed feature by feature rather than decoded into a vector: a row group of
+        // the Colombia dataset is 114 MB of geometry, and holding its decoded form as
+        // well would multiply peak memory for data that is folded in and dropped.
+        report.features +=
+            file.for_each_feature(index, &bytes, ecosystem_column, |ecosystem, polygons| {
+                // A MultiPolygon's parts go in separately: each contributes to the AOO
+                // on its own, and merging them into one ring list would read the second
+                // part's exterior as a hole in the first.
+                for polygon in polygons {
+                    accumulator.add_polygon(ecosystem, polygon);
+                }
+            })?;
         report.row_groups_read += 1;
         // `bytes` is dropped here, before the next row group is fetched. That single
         // fact is what bounds peak memory.
@@ -200,19 +212,27 @@ fn check_readable(file: &GeoParquet, ecosystem_column: &str) -> Result<(), Engin
         });
     }
 
-    // The metrics project from longitude/latitude themselves, so an already-projected
-    // file would be silently misread as degrees — small numbers, plausible output,
-    // entirely wrong. An absent CRS means OGC:CRS84 per the specification, which is
-    // what is wanted, so only a *stated* other CRS is refused.
-    if let Some(code) = file.geo().primary_crs_code() {
-        if !matches!(code.as_str(), "EPSG:4326" | "OGC:CRS84") {
-            return Err(EngineError::NotGeographic { found: code });
-        }
+    // The metrics project from longitude/latitude themselves, so a projected file would
+    // be misread as degrees — small numbers, plausible output, entirely wrong.
+    //
+    // The test is whether coordinates are degrees, *not* whether the code is 4326.
+    // National datasets are routinely on their own geographic datum, and this reader
+    // exists to read them: an allow-list of one code refuses Colombia's ecosystems map
+    // (EPSG:4686) outright. Which datum was used is recorded in the report instead.
+    if !file.geo().primary_is_geographic() {
+        return Err(EngineError::NotGeographic {
+            found: file
+                .geo()
+                .primary_crs_code()
+                .unwrap_or_else(|| "a projected coordinate system".to_owned()),
+        });
     }
 
     // Resolving the column now turns a typo into an immediate error rather than one
-    // discovered after the first row group has been fetched.
+    // discovered after the first row group has been fetched. The same goes for a codec
+    // this build lacks.
     file.ranges_for_row_group(0, ecosystem_column)?;
+    file.check_compression(ecosystem_column)?;
     Ok(())
 }
 

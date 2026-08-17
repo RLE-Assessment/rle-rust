@@ -37,6 +37,9 @@ http = ["dep:reqwest"]
 
 [dev-dependencies]
 futures = { version = "0.3", default-features = false, features = ["executor"] }
+# The HTTP tests drive a real socket, and reqwest's native transport needs a reactor.
+# Only the tests need it; the library stays runtime-free so it can target wasm32.
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
 
 [lints]
 workspace = true

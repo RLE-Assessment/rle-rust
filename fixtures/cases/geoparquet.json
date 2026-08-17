@@ -74,6 +74,20 @@
     4.0
   ],
   "path_without_covering": "fixtures/data/ecosystems_no_covering.parquet",
+  "compressed_fixture": {
+    "path": "fixtures/data/ecosystems_zstd.parquet",
+    "compression": "zstd"
+  },
+  "crs_variants": {
+    "magna": {
+      "path": "fixtures/data/ecosystems_magna.parquet",
+      "crs": "EPSG:4686"
+    },
+    "projected": {
+      "path": "fixtures/data/ecosystems_projected.parquet",
+      "crs": "EPSG:3116"
+    }
+  },
   "streaming_fixture": {
     "path": "fixtures/data/ecosystems_many.parquet",
     "num_rows": 2000,

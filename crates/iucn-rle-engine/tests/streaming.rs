@@ -300,6 +300,72 @@ fn bytes_that_are_not_parquet_are_reported_clearly() {
 }
 
 #[test]
+fn a_national_dataset_in_its_own_geographic_crs_is_read() {
+    // The case that matters most, because it is the file this milestone exists for.
+    // Colombia's ecosystems map is EPSG:4686 (MAGNA-SIRGAS) — geographic, in degrees,
+    // and not 4326. An allow-list of one code refuses the real dataset outright, so the
+    // question is whether coordinates are longitude/latitude, not which code says so.
+    let source = InMemorySource::new(fixture("ecosystems_magna.parquet"));
+    let mut accumulator = DistributionAccumulator::new();
+
+    let report = block_on(accumulate_geoparquet(
+        &source,
+        &Query::default(),
+        ECO_COLUMN,
+        &mut accumulator,
+    ))
+    .unwrap();
+
+    assert_eq!(report.features, 16);
+    assert!(accumulator.finish().eoo_km2("ECO_A") > 0.0);
+}
+
+#[test]
+fn the_report_names_the_coordinate_system_it_read() {
+    // MAGNA-SIRGAS is treated as longitude/latitude on WGS84, which is sound at these
+    // tolerances but is still an assumption. Recording it keeps the assessment's
+    // provenance honest rather than silently equating two datums.
+    let source = InMemorySource::new(fixture("ecosystems_magna.parquet"));
+    let mut accumulator = DistributionAccumulator::new();
+
+    let report = block_on(accumulate_geoparquet(
+        &source,
+        &Query::default(),
+        ECO_COLUMN,
+        &mut accumulator,
+    ))
+    .unwrap();
+
+    assert_eq!(report.crs.as_deref(), Some("EPSG:4686"));
+}
+
+#[test]
+fn a_projected_dataset_is_still_refused() {
+    // The refusal has to survive relaxing the geographic check. EPSG:3116 is
+    // MAGNA-SIRGAS / Colombia Bogota zone — metres, and a real choice for Colombian
+    // data. Read as degrees its coordinates are nonsense that still produces numbers.
+    let source = InMemorySource::new(fixture("ecosystems_projected.parquet"));
+    let mut accumulator = DistributionAccumulator::new();
+
+    let error = block_on(accumulate_geoparquet(
+        &source,
+        &Query::default(),
+        ECO_COLUMN,
+        &mut accumulator,
+    ))
+    .unwrap_err();
+
+    assert!(
+        matches!(error, EngineError::NotGeographic { .. }),
+        "{error:?}"
+    );
+    assert!(
+        format!("{error}").contains("3116"),
+        "the message should name the CRS found: {error}"
+    );
+}
+
+#[test]
 fn the_report_accounts_for_every_byte_it_fetched() {
     // The report is what a caller uses to know whether pruning worked, so it has to
     // agree with what actually crossed the wire rather than being an estimate.
