@@ -37,6 +37,11 @@ allow = [
     # policies dislike — but MIT and ISC, already allowed here, grant none either, so
     # this adds no obligation the project was not already accepting.
     "CC0-1.0",
+    # Covers borrow-or-share, reached through boon's URI parser when the
+    # schema-validation feature is on. MIT-0 is MIT with the attribution clause
+    # removed, so it is strictly more permissive than the MIT entry above and imposes
+    # no obligation this project was not already accepting.
+    "MIT-0",
 ]
 confidence-threshold = 0.9
 
