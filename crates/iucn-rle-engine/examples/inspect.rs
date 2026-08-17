@@ -84,6 +84,7 @@ fn main() {
         );
 
         let geo = file.geo();
+        println!("geoparquet: {} (as declared by the writer)", geo.version);
         println!("geometry column: {}", geo.primary_column);
         println!("encoding: {}", geo.primary_encoding());
         println!(
@@ -96,14 +97,20 @@ fn main() {
                 "projected — must be reprojected first"
             }
         );
-        println!(
-            "bbox covering: {}",
-            if geo.primary_covering().is_some() {
-                "present — spatial pruning available"
-            } else {
-                "absent — every row group must be read"
-            }
-        );
+        // The declared version is reported, and deliberately not trusted. geopandas
+        // 1.1.4 writes "1.0.0" while also writing the `covering` key introduced in
+        // 1.1.0, so what the file *says* and what it *contains* can disagree — which is
+        // worth surfacing here, since a reader that gated on the version would lose all
+        // spatial pruning on files from the most widely used writer there is.
+        match geo.primary_covering() {
+            Some(_) if geo.version.starts_with("1.0") => println!(
+                "bbox covering: present — spatial pruning available, even though the \
+                 file declares {} and covering is a 1.1 feature",
+                geo.version
+            ),
+            Some(_) => println!("bbox covering: present — spatial pruning available"),
+            None => println!("bbox covering: absent — every row group must be read"),
+        }
 
         let columns: Vec<_> = file
             .metadata()
