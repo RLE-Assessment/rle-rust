@@ -73,5 +73,20 @@
     49.5,
     4.0
   ],
-  "path_without_covering": "fixtures/data/ecosystems_no_covering.parquet"
+  "path_without_covering": "fixtures/data/ecosystems_no_covering.parquet",
+  "streaming_fixture": {
+    "path": "fixtures/data/ecosystems_many.parquet",
+    "num_rows": 2000,
+    "num_row_groups": 8,
+    "ecosystems": [
+      "MANY_00",
+      "MANY_01",
+      "MANY_02",
+      "MANY_03",
+      "MANY_04",
+      "MANY_05",
+      "MANY_06",
+      "MANY_07"
+    ]
+  }
 }

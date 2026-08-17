@@ -4,6 +4,7 @@ members = [
     "crates/iucn-rle-core",
     "crates/iucn-rle-capi",
     "crates/iucn-rle-cli",
+    "crates/iucn-rle-engine",
     "crates/iucn-rle-format",
     "crates/iucn-rle-io",
     "bindings/python",
@@ -25,6 +26,7 @@ authors = ["RLE-Assessment contributors"]
 [workspace.dependencies]
 iucn-rle-core = { path = "crates/iucn-rle-core", version = "0.0.1" }
 iucn-rle-format = { path = "crates/iucn-rle-format", version = "0.0.1" }
+iucn-rle-io = { path = "crates/iucn-rle-io", version = "0.0.1" }
 bytes = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -923,6 +923,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "iucn-rle-engine"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures",
+ "iucn-rle-core",
+ "iucn-rle-format",
+ "iucn-rle-io",
+ "thiserror",
+]
+
+[[package]]
 name = "iucn-rle-format"
 version = "0.0.1"
 dependencies = [

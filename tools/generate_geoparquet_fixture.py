@@ -47,7 +47,21 @@ DATA = ROOT / "fixtures" / "data" / "ecosystems.parquet"
 # every 1.0 file looks like. Spatial pruning is impossible on these, and the reader must
 # fall back to reading everything rather than quietly returning nothing.
 DATA_NO_COVERING = ROOT / "fixtures" / "data" / "ecosystems_no_covering.parquet"
+# A file where the data outweighs the metadata, as real ones do.
+#
+# The small fixture above cannot demonstrate streaming, and it took a failing test to
+# notice why: its footer is about two thirds of the file. Parquet metadata has a floor —
+# the GeoParquet `geo` key alone carries a full PROJJSON CRS — so on a 19 KB file
+# "fetch the footer" is very nearly "fetch everything", and peak memory looks the same
+# whether a reader streams or not. Only a file whose row groups dominate its footer can
+# tell the two apart.
+DATA_MANY = ROOT / "fixtures" / "data" / "ecosystems_many.parquet"
 MANIFEST = ROOT / "fixtures" / "cases" / "geoparquet.json"
+
+# Big enough that one row group is a small fraction of the file, small enough to sit in
+# git without complaint.
+MANY_ECOSYSTEMS = 8
+MANY_PER_ECOSYSTEM = 250
 
 ROW_GROUP_SIZE = 4
 
@@ -95,6 +109,26 @@ def build() -> gpd.GeoDataFrame:
                 }
             )
 
+    return gpd.GeoDataFrame(records, crs="EPSG:4326")
+
+
+def build_many() -> gpd.GeoDataFrame:
+    """Many small features, one ecosystem per row group."""
+    records = []
+    for index in range(MANY_ECOSYSTEMS):
+        code = f"MANY_{index:02d}"
+        for feature in range(MANY_PER_ECOSYSTEM):
+            # Spread along a row so each ecosystem occupies its own longitude band and
+            # the features within it occupy distinct grid cells.
+            lon = -170.0 + index * 20.0 + (feature % 50) * 0.3
+            lat = -40.0 + (feature // 50) * 0.3
+            records.append(
+                {
+                    "eco_code": code,
+                    "feature_id": f"{code}-{feature:04d}",
+                    "geometry": square(lon, lat, 0.2),
+                }
+            )
     return gpd.GeoDataFrame(records, crs="EPSG:4326")
 
 
@@ -190,14 +224,30 @@ def main() -> int:
         compression=None,
     )
 
+    many_target = DATA_MANY if not args.check else DATA_MANY.with_suffix(".check.parquet")
+    many = build_many()
+    many.to_parquet(
+        many_target,
+        row_group_size=MANY_PER_ECOSYSTEM,
+        write_covering_bbox=True,
+        compression=None,
+    )
+
     manifest = manifest_for(frame, target)
     manifest["path"] = str(DATA.relative_to(ROOT))
     manifest["file_size"] = target.stat().st_size
     manifest["path_without_covering"] = str(DATA_NO_COVERING.relative_to(ROOT))
+    manifest["streaming_fixture"] = {
+        "path": str(DATA_MANY.relative_to(ROOT)),
+        "num_rows": len(many),
+        "num_row_groups": pq.ParquetFile(many_target).metadata.num_row_groups,
+        "ecosystems": sorted(many["eco_code"].unique().tolist()),
+    }
 
     if args.check:
         target.unlink()
         plain.unlink()
+        many_target.unlink()
         if not MANIFEST.exists():
             print(f"{MANIFEST} does not exist; run without --check", file=sys.stderr)
             return 1

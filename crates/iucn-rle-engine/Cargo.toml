@@ -1,0 +1,26 @@
+[package]
+name = "iucn-rle-engine"
+description = "Fetch-and-decode orchestration for IUCN Red List of Ecosystems assessments"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+# The only crate that joins async I/O to synchronous decoding. It holds the loop that
+# makes memory bounded: fetch one row group or tile, decode it, fold it into an
+# accumulator, drop it. Nothing here parses bytes or computes a metric itself.
+[dependencies]
+iucn-rle-core = { workspace = true }
+iucn-rle-format = { workspace = true }
+iucn-rle-io = { workspace = true }
+async-trait = "0.1"
+thiserror = { workspace = true }
+
+[dev-dependencies]
+bytes = { workspace = true }
+futures = { version = "0.3", default-features = false, features = ["executor"] }
+
+[lints]
+workspace = true

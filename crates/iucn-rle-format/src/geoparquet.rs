@@ -669,6 +669,36 @@ impl GeoParquet {
         })
     }
 
+    /// The byte ranges one row group needs, for the columns an assessment reads.
+    ///
+    /// Separate from [`Self::plan`] because streaming wants them a row group at a time:
+    /// fetching every range a plan names would put the whole selection in memory at
+    /// once, which is the thing this design exists to avoid.
+    ///
+    /// # Errors
+    ///
+    /// [`FormatError::NoSuchColumn`] if `ecosystem_column` is not in the file.
+    pub fn ranges_for_row_group(
+        &self,
+        index: usize,
+        ecosystem_column: &str,
+    ) -> Result<Vec<Range<u64>>, FormatError> {
+        let eco_leaf = self.leaf_index(ecosystem_column)?;
+        let geometry_leaf = self.leaf_index(&self.geo.primary_column)?;
+        let Some(group) = self.metadata.row_groups().get(index) else {
+            return Ok(Vec::new());
+        };
+
+        let ranges = [eco_leaf, geometry_leaf]
+            .into_iter()
+            .map(|leaf| {
+                let (start, length) = group.column(leaf).byte_range();
+                start..start + length
+            })
+            .collect();
+        Ok(coalesce(ranges))
+    }
+
     /// Decode one row group from bytes that were fetched for it.
     ///
     /// # Errors
