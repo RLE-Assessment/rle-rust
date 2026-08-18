@@ -17,15 +17,31 @@ iucn-rle-format = { workspace = true }
 iucn-rle-io = { workspace = true }
 async-trait = "0.1"
 thiserror = { workspace = true }
+serde = { workspace = true }
+
+# Only the blocking entry points need a runtime, and only on native: a browser tab has
+# one thread and cannot park it. Optional and target-gated so the async library — the
+# part that must reach wasm32 — never pulls tokio in.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.tokio]
+version = "1"
+default-features = false
+# `net` and `time` are named rather than inherited from reqwest: `enable_all()` only
+# starts the drivers actually compiled in, and relying on another crate's feature
+# selection would make this build work by accident.
+features = ["rt", "net", "time"]
+optional = true
 
 [features]
 default = []
+# Synchronous wrappers for callers that cannot be async: Python, R, the CLI.
+blocking = ["dep:tokio"]
 # Forwarded so `inspect` can report schema conformance. Off by default: validation is a
 # tooling concern, and the browser build should not pay for a JSON Schema engine.
 schema-validation = ["iucn-rle-format/schema-validation"]
 
 [dev-dependencies]
 bytes = { workspace = true }
+serde_json = { workspace = true }
 # Only the examples need a reactor: reqwest's native transport drives one, while the
 # browser's Fetch does not. Keeping it out of the library is what lets the engine
 # target wasm32.

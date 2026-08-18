@@ -11,7 +11,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::distribution::DistributionAccumulator;
+use crate::distribution::{Distribution, DistributionAccumulator};
 use crate::grid::{AOO_CELL_SIZE_M, AOO_CRS};
 use crate::{
     criterion_b, Basis, ConditionStatus, DeclineAspect, Estimate, Subconditions, Summary,
@@ -287,8 +287,17 @@ pub fn distribution_metrics(polygons: &[PolygonInput]) -> Result<DistributionSum
         accumulator.add_polygon(&polygon.ecosystem, &polygon.rings);
     }
 
-    let distribution = accumulator.finish();
+    Ok(summarize(&accumulator.finish()))
+}
 
+/// Flatten a finished distribution into the shape every binding returns.
+///
+/// Split out from [`distribution_metrics`] because polygons handed in by a caller and
+/// polygons streamed from a remote file arrive by completely different routes but must
+/// produce byte-identical output — otherwise "the same assessment" would depend on
+/// where the data came from.
+#[must_use]
+pub fn summarize(distribution: &Distribution) -> DistributionSummary {
     let ecosystems = distribution
         .ecosystems()
         .iter()
@@ -304,10 +313,10 @@ pub fn distribution_metrics(polygons: &[PolygonInput]) -> Result<DistributionSum
         })
         .collect();
 
-    Ok(DistributionSummary {
+    DistributionSummary {
         ecosystems,
         overfull_cells: distribution.grid().overfull_cells(),
         grid_crs: AOO_CRS.to_owned(),
         cell_size_m: AOO_CELL_SIZE_M,
-    })
+    }
 }
