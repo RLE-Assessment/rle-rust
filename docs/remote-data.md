@@ -7,6 +7,44 @@ How this library reads a dataset it does not have, and what real files taught us
 doing it. Written down because most of it was discovered rather than designed, and every
 item cost something to find.
 
+## Reading one
+
+Python is the first binding to expose this. Nothing is written to disk.
+
+```python
+import iucn_rle
+
+metrics = iucn_rle.distribution_metrics_from_url(
+    "https://data.source.coop/tyler/colombia-ecosystems-map/"
+    "ecosistemas/ECOSISTEMAS_MEC_122024.parquet",
+    ecosystem_column="ecos_general",
+)
+metrics["read"]
+# {'row_groups_read': 47, 'row_groups_skipped': 0, 'features': 460350,
+#  'bytes_fetched': 1792600000, 'crs': 'EPSG:4686'}
+```
+
+The result is what a local `distribution_metrics` returns plus that `read` key, so
+anything downstream takes either. `bbox=` and `ecosystems=` restrict what is read.
+
+The call **releases the GIL** for the whole fetch and decode, which matters because
+Quarto and Jupyter kernels already run an asyncio event loop that a blocking call would
+freeze for the duration:
+
+```python
+metrics = await asyncio.to_thread(
+    iucn_rle.distribution_metrics_from_url, url, "ecos_general"
+)
+```
+
+That is a contract rather than an optimisation, and it is invisible in the returned
+numbers — identical either way — so it is tested by watching whether the main thread
+keeps running during a call. Without the release it ran 0 times in 0.59 s; with it, 376.
+
+To read a file's structure without assessing it, `just inspect <url>` fetches the footer
+only and reports the schema, row groups, CRS, GeoParquet version and any structural
+problems.
+
 ## The shape of it
 
 Three layers, and the split is the design:
