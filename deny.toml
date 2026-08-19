@@ -49,9 +49,13 @@ confidence-threshold = 0.9
 multiple-versions = "warn"
 wildcards = "deny"
 
-# object_store's cloud transports do not compile for wasm32-unknown-unknown, and a
-# transitive pull would silently break the browser binding. Ban it outright; the
-# ByteSource trait in iucn-rle-io is the supported extension point instead.
+# object_store's transport features (aws, azure, gcp, http) force aws-lc-rs, a C and
+# assembly crypto library that cannot build for wasm32-unknown-unknown. Its `-base`
+# variants do compile there, but omit the transport — so nothing usable survives the
+# browser target today. Banned outright because a transitive pull would leave the native
+# build green and break only the browser one; the ByteSource trait in iucn-rle-io is the
+# supported extension point instead. See that crate's module docs for the full check,
+# including the two open upstream WebAssembly issues.
 # GEOS/GDAL/PROJ sys-crates are banned for the same reason: they are C/C++ and
 # would end both the WASM binding and portable wheels.
 deny = [

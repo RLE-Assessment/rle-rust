@@ -18,10 +18,30 @@
 //!
 //! # What is deliberately absent
 //!
-//! `object_store` is the obvious choice for this job and cannot be used: its `aws`,
-//! `azure`, `gcp` and `http` features do not compile for `wasm32-unknown-unknown`,
-//! because each bundles a native reqwest transport. `deny.toml` bans it outright so a
-//! transitive dependency cannot quietly reintroduce it and break the browser build.
+//! `object_store` is the obvious choice for this job, and this crate exists because it
+//! cannot be used. Checked against 0.14.1 on 2026-08-19, with
+//! `cargo check --target wasm32-unknown-unknown`:
+//!
+//! * `aws`, `azure`, `gcp` and `http` all **fail**. Each forces `aws-lc-rs`, a C and
+//!   assembly crypto library whose build script cannot run for this target.
+//! * `aws-base`, `gcp-base` and `http-base` **compile** — but they omit the transport,
+//!   which is the part worth having. A credential chain with no way to send a request
+//!   is not the feature anyone adopts `object_store` for.
+//!
+//! Note the blocker is *not* reqwest, which targets the browser happily through Fetch
+//! and is what this crate uses. It is the TLS stack those features pin.
+//!
+//! Two upstream issues say the WebAssembly story is not finished either way:
+//! [#624](https://github.com/apache/arrow-rs-object-store/issues/624), an unfixed crash
+//! on the retry path because `retry.rs` calls `std::time::Instant::now()`, which panics
+//! unconditionally there; and
+//! [#26](https://github.com/apache/arrow-rs-object-store/issues/26), which records that
+//! upstream checks WebAssembly *compilation* but runs no tests on a WebAssembly runtime.
+//!
+//! `deny.toml` bans the crate outright, because the realistic way it would arrive is
+//! transitively — where the native build stays green and only the browser one breaks.
+//! Worth revisiting when those issues close and the transport features stop pinning a
+//! C crypto library.
 
 use core::ops::Range;
 
