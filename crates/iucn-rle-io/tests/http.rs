@@ -130,11 +130,21 @@ fn serve(mut stream: TcpStream, body: &[u8], behaviour: Behaviour) -> std::io::R
         "Accept-Ranges: bytes\r\n".to_owned()
     };
 
+    // Declared on every response, and load-bearing rather than tidy. This server
+    // answers one request per connection and then drops the stream — but HTTP/1.1
+    // defaults to keep-alive, so without saying so the client is entitled to pool the
+    // socket and send its next request down a connection the server has already closed.
+    // Whether it notices the close first is a race, which is why this suite failed
+    // intermittently on CI and never locally: the only test that issues two requests
+    // through one client is the one that broke. Saying `close` means the socket is
+    // never pooled, so there is nothing to race.
+    let connection = "Connection: close\r\n";
+
     if method == "HEAD" {
         // The case that matters: a HEAD reply carries Content-Length in the header and
         // no body at all.
         let head = format!(
-            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n{accept_ranges}\r\n",
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n{accept_ranges}{connection}\r\n",
             body.len()
         );
         stream.write_all(head.as_bytes())?;
@@ -156,7 +166,7 @@ fn serve(mut stream: TcpStream, body: &[u8], behaviour: Behaviour) -> std::io::R
 
             let head = format!(
                 "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\n\
-                 Content-Range: bytes {start}-{end}/{}\r\n{accept_ranges}\r\n",
+                 Content-Range: bytes {start}-{end}/{}\r\n{accept_ranges}{connection}\r\n",
                 slice.len(),
                 body.len()
             );
@@ -165,7 +175,7 @@ fn serve(mut stream: TcpStream, body: &[u8], behaviour: Behaviour) -> std::io::R
         }
         _ => {
             let head = format!(
-                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n{accept_ranges}\r\n",
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n{accept_ranges}{connection}\r\n",
                 body.len()
             );
             stream.write_all(head.as_bytes())?;
@@ -212,6 +222,23 @@ fn a_suffix_read_gets_the_end_of_the_object() {
     let bytes = block_on(source.read_suffix(16)).unwrap();
 
     assert_eq!(&bytes[..], &body()[4080..]);
+}
+
+#[test]
+fn many_sequential_requests_through_one_source_all_succeed() {
+    // The shape every real read has: one HEAD for the size, then a GET per range, all
+    // through the same client. `reqwest` pools connections, so this is the only shape
+    // that exercises reuse — and reuse is what made this suite flaky on CI.
+    let server = Server::start(body(), Behaviour::Correct);
+    let source = server.source();
+
+    block_on(async {
+        assert_eq!(source.size().await.unwrap(), 4096);
+        for start in (0..2048).step_by(64) {
+            let bytes = source.read_range(start..start + 64).await.unwrap();
+            assert_eq!(bytes.len(), 64, "range {start}..{}", start + 64);
+        }
+    });
 }
 
 #[test]
