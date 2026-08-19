@@ -25,7 +25,7 @@ import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-RANGE = re.compile(r"^bytes=(\d+)-(\d+)$")
+RANGE = re.compile(r"^bytes=(\d*)-(\d*)$")
 
 
 def build_handler(body: bytes, delay: float) -> type[BaseHTTPRequestHandler]:
@@ -59,11 +59,21 @@ def build_handler(body: bytes, delay: float) -> type[BaseHTTPRequestHandler]:
                 self.wfile.write(body)
                 return
 
-            # The end is inclusive, per RFC 9110. Treating it as exclusive silently
-            # truncates every response by one byte, which a parquet footer survives
-            # just often enough to be confusing.
-            start, end = int(match.group(1)), int(match.group(2))
-            end = min(end, len(body) - 1)
+            # Both ends are inclusive, per RFC 9110. Treating the end as exclusive
+            # silently truncates every response by one byte, which a parquet footer
+            # survives just often enough to be confusing.
+            #
+            # `bytes=-N` is a *suffix*: the final N bytes, naming no position. Reading
+            # it as `0-N` serves the start of the file instead, and a reader handed the
+            # wrong end reports a corrupt footer rather than a bad request. The engine
+            # opens every file this way, to learn the size and the footer in one
+            # request instead of two.
+            lo, hi = match.group(1), match.group(2)
+            if lo == "":
+                start, end = max(0, len(body) - int(hi)), len(body) - 1
+            else:
+                start = int(lo)
+                end = min(int(hi) if hi else len(body) - 1, len(body) - 1)
             chunk = body[start : end + 1]
 
             self.send_response(206)
