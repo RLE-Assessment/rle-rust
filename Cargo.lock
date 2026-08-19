@@ -1011,6 +1011,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "futures",
+ "futures-util",
  "reqwest",
  "thiserror",
  "tokio",

@@ -12,8 +12,10 @@
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{mpsc, Arc};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use iucn_rle_io::{ByteSource, HttpSource, IoError};
 
@@ -44,19 +46,33 @@ enum Behaviour {
     ShortBody,
 }
 
-/// A single-threaded HTTP server serving `body`, shut down when dropped.
+/// An HTTP server serving `body`, shut down when dropped.
+///
+/// Each connection is handled on its own thread. That is not tidiness: a server that
+/// answered one connection at a time would serialise concurrent requests all by itself,
+/// so a client that had stopped issuing them in parallel would still look correct.
 struct Server {
     port: u16,
+    requests: Arc<AtomicUsize>,
     shutdown: Option<mpsc::Sender<()>>,
     handle: Option<thread::JoinHandle<()>>,
 }
 
 impl Server {
     fn start(body: Vec<u8>, behaviour: Behaviour) -> Self {
+        Self::start_slow(body, behaviour, Duration::ZERO)
+    }
+
+    /// As [`Self::start`], taking `delay` to answer — so a wait that should have
+    /// happened once, in parallel, is distinguishable from one that happened per request.
+    fn start_slow(body: Vec<u8>, behaviour: Behaviour, delay: Duration) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("a free port");
         let port = listener.local_addr().expect("an address").port();
         let (shutdown, stopped) = mpsc::channel::<()>();
+        let requests = Arc::new(AtomicUsize::new(0));
 
+        let body = Arc::new(body);
+        let counter = Arc::clone(&requests);
         let handle = thread::spawn(move || {
             for stream in listener.incoming() {
                 // Disconnected counts as "stop": shutdown is signalled by *dropping*
@@ -67,17 +83,28 @@ impl Server {
                     return;
                 }
                 let Ok(stream) = stream else { return };
-                if serve(stream, &body, behaviour).is_err() {
-                    return;
-                }
+                let body = Arc::clone(&body);
+                let counter = Arc::clone(&counter);
+                thread::spawn(move || {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    thread::sleep(delay);
+                    let _ = serve(stream, &body, behaviour);
+                });
             }
         });
 
         Self {
             port,
+            requests,
             shutdown: Some(shutdown),
             handle: Some(handle),
         }
+    }
+
+    /// Requests answered so far. Counted per connection, which is the same thing here
+    /// because every response says `Connection: close`.
+    fn requests(&self) -> usize {
+        self.requests.load(Ordering::SeqCst)
     }
 
     fn url(&self) -> String {
@@ -154,9 +181,19 @@ fn serve(mut stream: TcpStream, body: &[u8], behaviour: Behaviour) -> std::io::R
     match range_header.as_deref() {
         Some(range) if behaviour != Behaviour::IgnoresRanges => {
             let spec = range.trim_start_matches("bytes=");
-            let (start, end) = spec.split_once('-').unwrap_or(("0", ""));
-            let start: usize = start.parse().unwrap_or(0);
-            let end: usize = end.parse().unwrap_or(body.len() - 1);
+            let last = body.len() - 1;
+            let (start, end) = match spec.split_once('-') {
+                // `bytes=-N` asks for the final N bytes and does not name a position.
+                // Parsing it as `0-N` would silently serve the *start* of the file, and
+                // a parquet reader handed the wrong end reports a corrupt footer.
+                Some(("", count)) => {
+                    let count: usize = count.parse().unwrap_or(body.len());
+                    (body.len().saturating_sub(count), last)
+                }
+                Some((from, "")) => (from.parse().unwrap_or(0), last),
+                Some((from, to)) => (from.parse().unwrap_or(0), to.parse().unwrap_or(last)),
+                None => (0, last),
+            };
             let slice = &body[start..=end.min(body.len() - 1)];
             let slice = if behaviour == Behaviour::ShortBody {
                 &slice[..slice.len() / 2]
@@ -222,6 +259,67 @@ fn a_suffix_read_gets_the_end_of_the_object() {
     let bytes = block_on(source.read_suffix(16)).unwrap();
 
     assert_eq!(&bytes[..], &body()[4080..]);
+}
+
+#[test]
+fn a_suffix_read_costs_one_request() {
+    // Every parquet read starts here, and the default path spends two round trips on it:
+    // a HEAD purely to learn the size, then a GET for the footer. A suffix range request
+    // already carries the total in `Content-Range`, so the HEAD is pure latency — and
+    // latency, not bandwidth or CPU, is what a remote read is actually made of. Measured
+    // on the Bogotá dataset: 0.70s of network, 0.11s of decode, 1.39s of wall clock, with
+    // the difference being four sequential requests.
+    let server = Server::start(body(), Behaviour::Correct);
+    let source = server.source();
+
+    let bytes = block_on(source.read_suffix(16)).unwrap();
+
+    assert_eq!(
+        &bytes[..],
+        &body()[4080..],
+        "the end of the object, not the start"
+    );
+    assert_eq!(
+        server.requests(),
+        1,
+        "a suffix read should not need a HEAD first"
+    );
+}
+
+#[test]
+fn a_suffix_read_learns_the_size_without_asking_again() {
+    // `Content-Range: bytes 4080-4095/4096` states the total, so the size is already
+    // known by the time the footer arrives.
+    let server = Server::start(body(), Behaviour::Correct);
+    let source = server.source();
+
+    block_on(source.read_suffix(16)).unwrap();
+    let size = block_on(source.size()).unwrap();
+
+    assert_eq!(size, 4096);
+    assert_eq!(server.requests(), 1, "the size came free with the footer");
+}
+
+#[test]
+fn several_ranges_are_fetched_at_once() {
+    // A row group's column chunks are read together. One round trip each is one avoidable
+    // wait per chunk, and a national file has dozens of row groups.
+    let server = Server::start_slow(body(), Behaviour::Correct, Duration::from_millis(100));
+    let source = server.source();
+
+    let started = Instant::now();
+    let parts = block_on(source.read_ranges(&[0..64, 64..128, 128..192, 192..256])).unwrap();
+    let elapsed = started.elapsed();
+
+    // Order has to survive: callers zip the results back against the ranges they asked
+    // for, so a reordering would put one column's bytes under another's name.
+    assert_eq!(parts.len(), 4);
+    assert_eq!(&parts[0][..], &body()[0..64]);
+    assert_eq!(&parts[3][..], &body()[192..256]);
+    assert!(
+        elapsed < Duration::from_millis(250),
+        "took {elapsed:?}; one at a time would be about 400ms"
+    );
 }
 
 #[test]

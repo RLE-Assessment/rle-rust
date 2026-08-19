@@ -15,6 +15,10 @@ authors.workspace = true
 async-trait = "0.1"
 bytes = "1"
 thiserror = { workspace = true }
+# For `buffered()`, which issues several range requests at once on a current-thread
+# runtime. Pure Rust and no executor of its own, so it reaches wasm32 unchanged — the
+# concurrency here is I/O overlap, not threads.
+futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 
 # reqwest is the one HTTP client covering both native and the browser: on
 # wasm32-unknown-unknown it dispatches through the Fetch API. object_store is
