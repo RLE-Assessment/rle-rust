@@ -119,6 +119,40 @@ Colombia's map passes the first and failed the second four different ways. Both 
 advisory: a technically imperfect file is usually still readable, and refusing it would
 block real work for nothing.
 
+## A remote read is made of round trips, not bytes
+
+Worth stating because it is the opposite of the intuition the rest of this page builds.
+Everything above is about transferring *less*, and on a national file that is right. On
+anything smaller, the read is dominated by how many times it waits.
+
+Measured on the Bogotá subset — 16 MB, one row group:
+
+| | |
+|---|---|
+| Moving the data | 0.70 s |
+| Decoding it | 0.11 s |
+| Actual read | 1.39 s |
+
+The difference is four **sequential** requests: a HEAD to learn the size, a GET for the
+footer, then the row group's column chunks one after another. Serving the same file over
+loopback with a fixed 0.1 s per request costs 0.53 s against 0.11 s, which is how the
+count was established rather than guessed.
+
+Two changes remove half of them, and neither needs more bandwidth:
+
+* **A suffix range request** (`Range: bytes=-65536`) returns the footer *and* the total
+  size in `Content-Range`. The HEAD existed only to work out where to ask from.
+* **Issuing a row group's column ranges together** rather than in sequence, with
+  `buffered()` on the same current-thread runtime.
+
+Four round trips become two: 0.54 s to 0.33 s at 0.1 s of latency, same answers.
+
+This also explains why the obvious optimisation is the wrong one. Overlapping the decode
+with the fetch, on a worker thread, was measured at about 7% because decode is 0.11 s of
+1.39 s — and it would double peak row-group memory to get it. Bandwidth is not the
+constraint either: fetching the file as four parallel ranges took 0.61 s against 0.70 s
+sequentially. **Count the waits before optimising the work.**
+
 ## Guarantees, and where they stop
 
 |  | bounds memory | bounds bytes transferred |

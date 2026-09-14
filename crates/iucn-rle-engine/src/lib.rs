@@ -26,8 +26,7 @@ use core::ops::Range;
 
 use iucn_rle_core::distribution::DistributionAccumulator;
 use iucn_rle_format::geoparquet::{
-    footer_range, parse_footer, Footer, FormatError, GeoParquet, Query, SparseBytes,
-    DEFAULT_FOOTER_PREFETCH,
+    parse_footer, Footer, FormatError, GeoParquet, Query, SparseBytes, DEFAULT_FOOTER_PREFETCH,
 };
 use iucn_rle_io::ByteSource;
 
@@ -200,19 +199,26 @@ async fn open<S: ByteSource + ?Sized>(
     options: &ReadOptions,
     report: &mut ReadReport,
 ) -> Result<GeoParquet, EngineError> {
+    // A suffix read, so the very first request returns footer bytes. Asking for the size
+    // first — which is what naming an absolute range requires — spends a whole round trip
+    // before any data moves, and the response to a suffix request states the total in
+    // `Content-Range` anyway. On a remote read that round trip is a real fraction of the
+    // wall clock: the work is made of latency far more than of bytes.
+    let mut tail = source.read_suffix(options.footer_prefetch).await?;
+    report.bytes_fetched += tail.len() as u64;
+    // Free: the suffix response carried it, and `HttpSource` cached it.
     let size = source.size().await?;
-    let mut range = footer_range(size, options.footer_prefetch);
 
     // Bounded because `NeedMore` always names a range reaching the end of the file, so
     // one retry suffices in practice; the loop guards against a malformed footer that
     // keeps asking rather than trusting it to converge.
     for _ in 0..4 {
-        let tail = source.read_range(range.clone()).await?;
-        report.bytes_fetched += tail.len() as u64;
-
         match parse_footer(&tail, size)? {
             Footer::Complete(file) => return Ok(*file),
-            Footer::NeedMore(wider) => range = wider,
+            Footer::NeedMore(wider) => {
+                tail = source.read_range(wider).await?;
+                report.bytes_fetched += tail.len() as u64;
+            }
         }
     }
 
