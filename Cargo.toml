@@ -25,6 +25,7 @@ authors = ["RLE-Assessment contributors"]
 
 [workspace.dependencies]
 iucn-rle-core = { path = "crates/iucn-rle-core", version = "0.0.1" }
+iucn-rle-engine = { path = "crates/iucn-rle-engine", version = "0.0.1" }
 iucn-rle-format = { path = "crates/iucn-rle-format", version = "0.0.1" }
 iucn-rle-io = { path = "crates/iucn-rle-io", version = "0.0.1" }
 bytes = "1"

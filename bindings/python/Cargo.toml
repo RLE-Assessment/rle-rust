@@ -15,6 +15,12 @@ crate-type = ["cdylib"]
 
 [dependencies]
 iucn-rle-core = { workspace = true }
+# `blocking` brings in a tokio runtime and reqwest. Python callers want a function that
+# returns an answer, and the engine is async because fetching bytes is; the wrapper that
+# bridges the two lives in the engine so R and the CLI share it rather than each
+# reinventing a runtime.
+iucn-rle-engine = { workspace = true, features = ["blocking"] }
+iucn-rle-format = { workspace = true }
 serde_json = { workspace = true }
 # abi3-py311 builds ONE wheel per platform instead of one per Python version,
 # cutting the release matrix from ~25 wheels to ~5. rle-python already requires

@@ -20,7 +20,10 @@ use iucn_rle_core::ffi::{
     criterion_b_from_parts, distribution_metrics, MetricInput, PolygonInput, SubconditionInput,
     SubconditionsInput,
 };
-use pyo3::exceptions::PyValueError;
+use iucn_rle_engine::blocking::{describe_failure, distribution_metrics_from_url};
+use iucn_rle_engine::{EngineError, ReadOptions};
+use iucn_rle_format::geoparquet::{Bbox, Query};
+use pyo3::exceptions::{PyIOError, PyValueError};
 use pyo3::prelude::*;
 
 /// Version of the underlying `iucn-rle-core` calculation engine.
@@ -127,6 +130,65 @@ fn distribution_metrics_json(
         .map_err(|e| PyValueError::new_err(format!("could not serialise metrics: {e}")))
 }
 
+/// Compute Criterion B spatial metrics from a remote `GeoParquet` file, returning JSON.
+///
+/// Reads over HTTP range requests: the footer first, then only the row groups the
+/// filters could not rule out. Nothing is written to disk.
+#[pyfunction]
+#[pyo3(signature = (url, ecosystem_column, *, bbox = None, ecosystems = None, footer_prefetch = None))]
+// Taken by value rather than as `&str` on purpose. The closure below runs with the GIL
+// released, and owning the strings means it cannot possibly hold a reference into
+// memory the interpreter manages while no thread is holding the GIL.
+#[allow(clippy::needless_pass_by_value)]
+fn distribution_metrics_from_url_json(
+    py: Python<'_>,
+    url: String,
+    ecosystem_column: String,
+    bbox: Option<(f64, f64, f64, f64)>,
+    ecosystems: Option<Vec<String>>,
+    footer_prefetch: Option<u64>,
+) -> PyResult<String> {
+    let mut query = Query::default();
+    if let Some((xmin, ymin, xmax, ymax)) = bbox {
+        query = query.with_bbox(Bbox::new(xmin, ymin, xmax, ymax));
+    }
+    if let Some(codes) = ecosystems {
+        query = query.with_ecosystems(codes);
+    }
+
+    let options = footer_prefetch.map_or_else(ReadOptions::default, |footer_prefetch| {
+        ReadOptions { footer_prefetch }
+    });
+
+    // Release the GIL for the entire fetch-and-decode. This is the contract the whole
+    // binding rests on, not a refinement: the call is dominated by waiting on a socket,
+    // and Quarto and Jupyter kernels run an asyncio event loop that stops dead for as
+    // long as the GIL is held. On a national dataset that is minutes of frozen kernel.
+    //
+    // Nothing about the returned numbers changes either way, so this cannot be verified
+    // by reading the output — see `test_the_gil_is_released_during_a_remote_read`, which
+    // watches the main thread instead.
+    let metrics = py
+        .detach(|| distribution_metrics_from_url(&url, &ecosystem_column, &query, &options))
+        .map_err(|error| remote_error(&url, &error))?;
+    serde_json::to_string(&metrics)
+        .map_err(|e| PyValueError::new_err(format!("could not serialise metrics: {e}")))
+}
+
+/// Turn an engine failure into the Python exception that fits it.
+///
+/// A transport failure is an `OSError` because that is what a Python caller catches
+/// around anything networked; everything else — a missing column, a projected CRS, a
+/// codec this build lacks — is a `ValueError`, since the fix is to the arguments or the
+/// file rather than to the connection.
+fn remote_error(url: &str, error: &EngineError) -> PyErr {
+    let message = describe_failure(url, error);
+    match error {
+        EngineError::Io(_) => PyIOError::new_err(message),
+        _ => PyValueError::new_err(message),
+    }
+}
+
 #[pymodule]
 fn _iucn_rle(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
@@ -134,6 +196,7 @@ fn _iucn_rle(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(thresholds_sha256, m)?)?;
     m.add_function(wrap_pyfunction!(criterion_b_json, m)?)?;
     m.add_function(wrap_pyfunction!(distribution_metrics_json, m)?)?;
+    m.add_function(wrap_pyfunction!(distribution_metrics_from_url_json, m)?)?;
     m.add("__version__", iucn_rle_core::version())?;
     Ok(())
 }

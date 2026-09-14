@@ -31,6 +31,9 @@ use iucn_rle_format::geoparquet::{
 };
 use iucn_rle_io::ByteSource;
 
+#[cfg(all(feature = "blocking", not(target_arch = "wasm32")))]
+pub mod blocking;
+
 /// Something that went wrong reading a dataset.
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
@@ -78,7 +81,7 @@ pub enum EngineError {
 ///
 /// Exists so the efficiency claim is observable rather than asserted. A reader that
 /// downloaded everything and returned the right answer would look identical without it.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ReadReport {
     /// Row groups that were fetched and decoded.
     pub row_groups_read: usize,

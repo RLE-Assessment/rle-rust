@@ -17,6 +17,7 @@ from typing import Any, Literal, Mapping, Sequence
 
 from ._iucn_rle import (
     criterion_b_json,
+    distribution_metrics_from_url_json,
     distribution_metrics_json,
     thresholds_sha256,
     thresholds_toml,
@@ -27,6 +28,7 @@ __all__ = [
     "__version__",
     "criterion_b",
     "distribution_metrics",
+    "distribution_metrics_from_url",
     "thresholds_sha256",
     "thresholds_toml",
     "version",
@@ -84,6 +86,73 @@ def distribution_metrics(
         pairs = list(polygons)
 
     return json.loads(distribution_metrics_json(pairs))
+
+def distribution_metrics_from_url(
+    url: str,
+    ecosystem_column: str,
+    *,
+    bbox: tuple[float, float, float, float] | None = None,
+    ecosystems: Sequence[str] | None = None,
+    footer_prefetch: int | None = None,
+) -> dict[str, Any]:
+    """Compute Criterion B spatial metrics from a GeoParquet file at a URL.
+
+    The file is never downloaded. Parquet keeps its metadata in a footer, so the read
+    fetches that first, uses each row group's statistics to rule out the ones that
+    cannot match, then streams the survivors one at a time. Peak memory is one row
+    group plus the occupied grid cells, whatever the file's size.
+
+    Args:
+        url: Direct address of the ``.parquet`` file. This is the *file*, not a portal
+            page describing it; the two commonly differ only by hostname.
+        ecosystem_column: Column naming each feature's ecosystem. National datasets
+            spell this differently — ``ecos_general`` for Colombia's map — and a
+            mistyped name is answered with the columns the file actually has.
+        bbox: ``(xmin, ymin, xmax, ymax)`` in the file's own CRS, restricting the read.
+            Pruning by box needs the bbox covering columns that GeoParquet 1.1 added;
+            without them the filter still gives the right answer, just no saving.
+        ecosystems: Restrict to these codes.
+        footer_prefetch: Bytes to fetch when first looking for the footer. Raise it for
+            very wide datasets, whose footers carry statistics for every column of
+            every row group.
+
+    Returns:
+        The same dict :func:`distribution_metrics` returns, plus a ``"read"`` key
+        recording what the read cost: row groups read and skipped, features, bytes
+        fetched, and the CRS the file declared.
+
+    Raises:
+        OSError: The fetch itself failed — unreachable host, HTTP error, or a server
+            that will not honour range requests.
+        ValueError: The file was reached but cannot be assessed: no such column, a
+            projected CRS, geometry in an encoding this build cannot decode.
+
+    This releases the GIL for the whole fetch-and-compute, so a notebook stays
+    responsive with nothing more than the standard library::
+
+        metrics = await asyncio.to_thread(
+            iucn_rle.distribution_metrics_from_url, url, "ecos_general"
+        )
+
+    The ``read`` key is worth looking at rather than skipping. It is what turns "this
+    was efficient" into a checkable claim::
+
+        >>> result = iucn_rle.distribution_metrics_from_url(url, "eco_code")
+        >>> result["read"]["row_groups_skipped"]
+        3
+
+    The result feeds straight into :func:`criterion_b`.
+    """
+    return json.loads(
+        distribution_metrics_from_url_json(
+            url,
+            ecosystem_column,
+            bbox=bbox,
+            ecosystems=list(ecosystems) if ecosystems is not None else None,
+            footer_prefetch=footer_prefetch,
+        )
+    )
+
 
 Status = Literal["met", "not_met", "not_assessed"]
 

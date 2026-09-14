@@ -984,6 +984,8 @@ dependencies = [
  "iucn-rle-core",
  "iucn-rle-format",
  "iucn-rle-io",
+ "serde",
+ "serde_json",
  "thiserror",
  "tokio",
 ]
@@ -1021,6 +1023,8 @@ name = "iucn-rle-python"
 version = "0.0.1"
 dependencies = [
  "iucn-rle-core",
+ "iucn-rle-engine",
+ "iucn-rle-format",
  "pyo3",
  "serde_json",
 ]
