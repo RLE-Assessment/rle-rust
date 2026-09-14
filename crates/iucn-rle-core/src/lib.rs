@@ -1,19 +1,8 @@
-//! Pure, synchronous IUCN Red List of Ecosystems assessment calculations.
-//!
-//! This crate is deliberately *sans-IO*: it never opens a socket, reads a file, or asks
-//! the clock for the time. Every input arrives as plain data and every output is plain
-//! data. Two things fall out of that constraint:
-//!
-//! * It compiles for `wasm32-unknown-unknown` unchanged, which is what makes the browser
-//!   binding possible at all.
-//! * Its public API and its test surface are the same surface, so the cross-language
-//!   fixture corpus can exercise all of it from Rust, Python, R, and JavaScript.
-//!
-//! Anything that needs bytes from a URL lives in `iucn-rle-io` and `iucn-rle-engine`.
-//!
-//! # Status
-//!
-//! M1. Category, threshold, and Criterion B types; no geometry and no I/O yet.
+// The README is the crate documentation, so every example in it runs as a doctest. A
+// README that drifts from the API is worse than none — it is the first thing a reader
+// trusts and the last thing anyone re-runs — and this is the only arrangement that makes
+// CI notice.
+#![doc = include_str!("../README.md")]
 
 pub mod aoo;
 pub mod assessment;

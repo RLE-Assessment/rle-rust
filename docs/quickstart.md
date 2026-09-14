@@ -250,12 +250,18 @@ result.criteria[0].category;          // 'EN', not 'CR'
 :sync: rust
 
 ```rust
-use iucn_rle_core::{CriterionId, ThreatLocations};
+use iucn_rle_core::{CriterionId, DeclineAspect, ThreatLocations};
 
-let subs = Subconditions::new()
-    .with_decline(DeclineAspect::SpatialExtent, ConditionStatus::NotMet)
+// `clauses = {"a": "not_met"}` in the other languages sets all three aspects of
+// clause (a), because (a) holds if any of them does. Ruling out only one leaves the
+// rest unassessed, and the answer is then `CR (EN-CR)` rather than `EN` — correctly,
+// since an unexamined aspect could still make (a) hold and so qualify CR.
+let mut subs = Subconditions::new()
     .with_threatening_processes(ConditionStatus::NotMet)
     .with_locations(ThreatLocations::Count(3));
+for aspect in DeclineAspect::ALL {
+    subs = subs.with_decline(aspect, ConditionStatus::NotMet);
+}
 
 let assessment = criterion_b(Some(eoo), None, &subs, ThresholdTable::v2_2024())?;
 assessment.result(CriterionId::B1).unwrap().category().best();   // Category::En
