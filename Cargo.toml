@@ -16,7 +16,7 @@ members = [
 exclude = ["bindings/r"]
 
 [workspace.package]
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 rust-version = "1.82"
 license = "Apache-2.0"
@@ -24,10 +24,10 @@ repository = "https://github.com/RLE-Assessment/rle-rust"
 authors = ["RLE-Assessment contributors"]
 
 [workspace.dependencies]
-iucn-rle-core = { path = "crates/iucn-rle-core", version = "0.0.1" }
-iucn-rle-engine = { path = "crates/iucn-rle-engine", version = "0.0.1" }
-iucn-rle-format = { path = "crates/iucn-rle-format", version = "0.0.1" }
-iucn-rle-io = { path = "crates/iucn-rle-io", version = "0.0.1" }
+iucn-rle-core = { path = "crates/iucn-rle-core", version = "0.1.0" }
+iucn-rle-engine = { path = "crates/iucn-rle-engine", version = "0.1.0" }
+iucn-rle-format = { path = "crates/iucn-rle-format", version = "0.1.0" }
+iucn-rle-io = { path = "crates/iucn-rle-io", version = "0.1.0" }
 bytes = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -947,7 +947,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "iucn-rle-capi"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "iucn-rle-core",
  "serde",
@@ -956,7 +956,7 @@ dependencies = [
 
 [[package]]
 name = "iucn-rle-cli"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "clap",
  "iucn-rle-core",
@@ -965,7 +965,7 @@ dependencies = [
 
 [[package]]
 name = "iucn-rle-core"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -976,7 +976,7 @@ dependencies = [
 
 [[package]]
 name = "iucn-rle-engine"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -992,7 +992,7 @@ dependencies = [
 
 [[package]]
 name = "iucn-rle-format"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
@@ -1008,7 +1008,7 @@ dependencies = [
 
 [[package]]
 name = "iucn-rle-io"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1021,7 +1021,7 @@ dependencies = [
 
 [[package]]
 name = "iucn-rle-python"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "iucn-rle-core",
  "iucn-rle-engine",
@@ -1032,7 +1032,7 @@ dependencies = [
 
 [[package]]
 name = "iucn-rle-wasm"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "iucn-rle-core",
  "serde",

@@ -9,6 +9,21 @@ repository.workspace = true
 authors.workspace = true
 categories = ["science", "science::geo"]
 keywords = ["iucn", "ecosystems", "conservation", "redlist"]
+readme = "README.md"
+
+# Three tests read the cross-language conformance corpus from `fixtures/cases/` at the
+# repository root, which is outside this package and cannot be pulled in — Cargo's
+# `include` cannot reach above the package directory. The corpus stays where it is on
+# purpose: Rust, the C ABI, Python, R and JavaScript all run the identical files, and
+# that shared location is what makes "every binding agrees" checkable.
+#
+# So they are left out of the published tarball rather than shipped broken. Everything
+# that ships can run; `cargo test` from a checkout still runs all of it.
+exclude = [
+    "tests/conformance.rs",
+    "tests/golden_null_island.rs",
+    "tests/projection.rs",
+]
 
 # INVARIANT: nothing here may touch the network, the filesystem, or the clock.
 # This crate must compile for wasm32-unknown-unknown unchanged. CI enforces it.
