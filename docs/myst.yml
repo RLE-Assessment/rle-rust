@@ -24,6 +24,7 @@ project:
       children:
         - file: install.md
         - file: quickstart.md
+        - file: remote-data.md
 site:
   template: book-theme
   options:

@@ -1,0 +1,32 @@
+{
+  "description": "Published GeoParquet JSON Schemas and the external schemas they reference, vendored so validation works offline and in the browser.",
+  "source": "https://geoparquet.org/releases",
+  "versions": {
+    "v0.2.0": "v0.2.0.json",
+    "v0.3.0": "v0.3.0.json",
+    "v0.4.0": "v0.4.0.json",
+    "v1.0.0-beta.1": "v1.0.0-beta.1.json",
+    "v1.0.0-rc.1": "v1.0.0-rc.1.json",
+    "v1.0.0": "v1.0.0.json",
+    "v1.1.0": "v1.1.0.json",
+    "v2.0.0-rc.1": "v2.0.0-rc.1.json"
+  },
+  "references": {
+    "https://proj.org/schemas/v0.4/projjson.schema.json": "proj.org_schemas_v0.4_projjson.schema.json",
+    "https://proj.org/schemas/v0.5/projjson.schema.json": "proj.org_schemas_v0.5_projjson.schema.json",
+    "https://proj.org/schemas/v0.7/projjson.schema.json": "proj.org_schemas_v0.7_projjson.schema.json"
+  },
+  "sizes": {
+    "proj.org_schemas_v0.4_projjson.schema.json": 32768,
+    "proj.org_schemas_v0.5_projjson.schema.json": 37360,
+    "proj.org_schemas_v0.7_projjson.schema.json": 38418,
+    "v0.2.0.json": 2236,
+    "v0.3.0.json": 2463,
+    "v0.4.0.json": 2729,
+    "v1.0.0-beta.1.json": 1179,
+    "v1.0.0-rc.1.json": 1177,
+    "v1.0.0.json": 1172,
+    "v1.1.0.json": 1824,
+    "v2.0.0-rc.1.json": 1385
+  }
+}

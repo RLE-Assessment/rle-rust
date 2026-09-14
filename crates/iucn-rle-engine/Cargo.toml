@@ -1,0 +1,36 @@
+[package]
+name = "iucn-rle-engine"
+description = "Fetch-and-decode orchestration for IUCN Red List of Ecosystems assessments"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+# The only crate that joins async I/O to synchronous decoding. It holds the loop that
+# makes memory bounded: fetch one row group or tile, decode it, fold it into an
+# accumulator, drop it. Nothing here parses bytes or computes a metric itself.
+[dependencies]
+iucn-rle-core = { workspace = true }
+iucn-rle-format = { workspace = true }
+iucn-rle-io = { workspace = true }
+async-trait = "0.1"
+thiserror = { workspace = true }
+
+[features]
+default = []
+# Forwarded so `inspect` can report schema conformance. Off by default: validation is a
+# tooling concern, and the browser build should not pay for a JSON Schema engine.
+schema-validation = ["iucn-rle-format/schema-validation"]
+
+[dev-dependencies]
+bytes = { workspace = true }
+# Only the examples need a reactor: reqwest's native transport drives one, while the
+# browser's Fetch does not. Keeping it out of the library is what lets the engine
+# target wasm32.
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
+futures = { version = "0.3", default-features = false, features = ["executor"] }
+
+[lints]
+workspace = true

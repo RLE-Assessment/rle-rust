@@ -125,6 +125,45 @@ projection-fixture:
 projection-fixture-check:
     python3 {{root}}/tools/generate_projection_fixture.py --check
 
+# Regenerate the GeoParquet reading fixtures. Needs geopandas and pyarrow.
+geoparquet-fixture:
+    python3 {{root}}/tools/generate_geoparquet_fixture.py
+
+# Fail if the GeoParquet fixtures no longer match what geopandas writes.
+#
+# Not part of `just all`: unlike the projection fixture, this one is checked against a
+# library whose output is expected to change between releases, and a drift here means
+# "geopandas changed" rather than "this repo is wrong". Run it deliberately when
+# upgrading geopandas.
+geoparquet-fixture-check:
+    python3 {{root}}/tools/generate_geoparquet_fixture.py --check
+
+# Regenerate the Cloud-Optimized GeoTIFF fixtures. Needs the GDAL command-line tools.
+cog-fixture:
+    python3 {{root}}/tools/generate_cog_fixture.py
+
+# Fail if the COG fixtures no longer match what GDAL's COG driver writes.
+#
+# Not part of `just all`, for the same reason as the GeoParquet check: drift here means
+# GDAL changed, not that this repo is wrong. Run it deliberately when upgrading GDAL.
+cog-fixture-check:
+    python3 {{root}}/tools/generate_cog_fixture.py --check
+
+# Re-vendor the published GeoParquet JSON Schemas. Needs network access.
+geoparquet-schemas:
+    python3 {{root}}/tools/vendor_geoparquet_schemas.py
+
+# Fail if the vendored schemas have drifted from geoparquet.org. Needs network access.
+#
+# Not part of `just all`: a drift here means upstream published something, not that this
+# repo is wrong. Run it deliberately.
+geoparquet-schemas-check:
+    python3 {{root}}/tools/vendor_geoparquet_schemas.py --check
+
+# Validate a GeoParquet file's metadata, against the published schema and the file.
+inspect url:
+    cargo run -p iucn-rle-engine --features schema-validation --example inspect -- "{{url}}"
+
 # Build the documentation site into docs/_build.
 docs: docs-thresholds
     cd {{root}}/docs && npx -y mystmd@latest build --html

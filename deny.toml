@@ -1,6 +1,15 @@
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+    # RUSTSEC-2024-0436: `paste` is unmaintained. Reached only through parquet, and
+    # unmaintained is not the same as vulnerable — no advisory describes a defect. It is
+    # a proc-macro that concatenates identifiers at compile time, so it contributes no
+    # runtime code, parses no untrusted input, and touches no I/O. Nothing it produces
+    # ships in the binary beyond the tokens it expanded to.
+    # Revisit when parquet drops it; there is no safe upgrade to move to today.
+    "RUSTSEC-2024-0436",
+]
 
 [licenses]
 version = 2
@@ -15,6 +24,24 @@ allow = [
     "ISC",
     "Unicode-3.0",
     "Zlib",
+    # Covers webpki-roots, the Mozilla CA certificate bundle reqwest uses for TLS.
+    # A *data* licence rather than a code one, which is why it was not on this list
+    # originally. Checked before adding: CDLA-Permissive-2.0 has no copyleft, no
+    # share-alike, and no attribution-by-name requirement — the only obligation is
+    # to carry the licence text with the data, exactly as MIT requires.
+    "CDLA-Permissive-2.0",
+    # Covers tiny-keccak, reached through ahash from the parquet/arrow stack. CC0-1.0 is
+    # a public-domain dedication rather than a licence: it imposes no obligations at all,
+    # so it is strictly more permissive than the MIT entry above. Worth recording that it
+    # explicitly declines to grant patent rights (section 4a) — which some corporate
+    # policies dislike — but MIT and ISC, already allowed here, grant none either, so
+    # this adds no obligation the project was not already accepting.
+    "CC0-1.0",
+    # Covers borrow-or-share, reached through boon's URI parser when the
+    # schema-validation feature is on. MIT-0 is MIT with the attribution clause
+    # removed, so it is strictly more permissive than the MIT entry above and imposes
+    # no obligation this project was not already accepting.
+    "MIT-0",
 ]
 confidence-threshold = 0.9
 
@@ -22,9 +49,13 @@ confidence-threshold = 0.9
 multiple-versions = "warn"
 wildcards = "deny"
 
-# object_store's cloud transports do not compile for wasm32-unknown-unknown, and a
-# transitive pull would silently break the browser binding. Ban it outright; the
-# ByteSource trait in iucn-rle-io is the supported extension point instead.
+# object_store's transport features (aws, azure, gcp, http) force aws-lc-rs, a C and
+# assembly crypto library that cannot build for wasm32-unknown-unknown. Its `-base`
+# variants do compile there, but omit the transport — so nothing usable survives the
+# browser target today. Banned outright because a transitive pull would leave the native
+# build green and break only the browser one; the ByteSource trait in iucn-rle-io is the
+# supported extension point instead. See that crate's module docs for the full check,
+# including the two open upstream WebAssembly issues.
 # GEOS/GDAL/PROJ sys-crates are banned for the same reason: they are C/C++ and
 # would end both the WASM binding and portable wheels.
 deny = [
