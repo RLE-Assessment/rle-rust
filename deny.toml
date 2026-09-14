@@ -1,15 +1,12 @@
 [advisories]
 version = 2
 yanked = "deny"
-ignore = [
-    # RUSTSEC-2024-0436: `paste` is unmaintained. Reached only through parquet, and
-    # unmaintained is not the same as vulnerable — no advisory describes a defect. It is
-    # a proc-macro that concatenates identifiers at compile time, so it contributes no
-    # runtime code, parses no untrusted input, and touches no I/O. Nothing it produces
-    # ships in the binary beyond the tokens it expanded to.
-    # Revisit when parquet drops it; there is no safe upgrade to move to today.
-    "RUSTSEC-2024-0436",
-]
+# Nothing ignored. RUSTSEC-2024-0436 (`paste` unmaintained) was listed here until
+# parquet 59.2 stopped depending on it; cargo-deny then warned on every run that the
+# entry matched no crate. An ignore that outlives its cause is worse than none: it is
+# noise printed next to real findings, and this one sat immediately beside
+# RUSTSEC-2026-0285 in the log that reported it.
+ignore = []
 
 [licenses]
 version = 2
